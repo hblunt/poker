@@ -31,9 +31,22 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
+		<Unit filename="cards.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="cards.h" />
+		<Unit filename="game.h" />
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="player.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="player.h" />
+		<Unit filename="scoringsystem.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="scoringsystem.h" />
 		<Extensions>
 			<lib_finder disable_auto="1" />
 		</Extensions>

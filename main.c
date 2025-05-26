@@ -47,11 +47,9 @@ int main(void)
     return 0;
 }
 
-void dealHand(Player players[], int numPlayers, Hand *deck, Hand *communityCards)
-{
+void dealHand(Player players[], int numPlayers, Hand *deck, Hand *communityCards) {
     // Reset player hands and make sure they're active
-    for(int i = 0; i < numPlayers; i++)
-    {
+    for(int i = 0; i < numPlayers; i++) {
         // Reset folded players back to active at start of new hand
         if (players[i].status == FOLDED && players[i].credits > 0) {
             players[i].status = ACTIVE;
@@ -87,14 +85,14 @@ void dealHand(Player players[], int numPlayers, Hand *deck, Hand *communityCards
     }
 }
 
-int playHand(int numPlayers, Player players[])
-{
+int playHand(int numPlayers, Player players[]) {
     int pot = 0;
     int cardsRevealed = 0;
     bool gameOver = false;
     int activePlayers = 0;
+    int currentDealer = players[0].dealer ? 0 : -1;
 
-    // Count active players before starting
+    // Count active players before starting and find current dealer
     for (int i = 0; i < numPlayers; i++) {
         if (players[i].status == ACTIVE || players[i].status == FOLDED) {
             if (players[i].credits > 0) {
@@ -102,6 +100,21 @@ int playHand(int numPlayers, Player players[])
                 activePlayers++;
             } else {
                 players[i].status = NOT_PLAYING;
+            }
+        }
+
+        if (players[i].dealer) {
+            currentDealer = i;
+        }
+    }
+
+    // If no dealer is set, assign to the first active player
+    if (currentDealer == -1) {
+        for (int i = 0; i < numPlayers; i++) {
+            if (players[i].status == ACTIVE) {
+                players[i].dealer = true;
+                currentDealer = i;
+                break;
             }
         }
     }
@@ -115,18 +128,43 @@ int playHand(int numPlayers, Player players[])
     Hand *deck = createDeck(1, 1);
     Hand *communityCards = createHand();
 
+    // Calculate positions for small blind and big blind
+    int smallBlindPos = findNextActivePlayer(players, numPlayers, currentDealer, 1);
+    int bigBlindPos = findNextActivePlayer(players, numPlayers, smallBlindPos, 1);
+
+    // Take blinds from players
+    printf("\n%s is the dealer\n", players[currentDealer].name);
+    printf("%s posts small blind of %d credits\n", players[smallBlindPos].name, SMALL_BLIND);
+    int smallBlindAmount = (players[smallBlindPos].credits >= SMALL_BLIND) ? SMALL_BLIND : players[smallBlindPos].credits;
+    players[smallBlindPos].credits -= smallBlindAmount;
+    players[smallBlindPos].currentBet = smallBlindAmount;
+    pot += smallBlindAmount;
+
+    printf("%s posts big blind of %d credits\n", players[bigBlindPos].name, BIG_BLIND);
+    int bigBlindAmount = (players[bigBlindPos].credits >= BIG_BLIND) ? BIG_BLIND : players[bigBlindPos].credits;
+    players[bigBlindPos].credits -= bigBlindAmount;
+    players[bigBlindPos].currentBet = bigBlindAmount;
+    pot += bigBlindAmount;
+
     dealHand(players, numPlayers, deck, communityCards);
 
     printf("\nStarting hand with %d active players\n", activePlayers);
 
-    printf("\n--- Round 1 Predictions ---\n");
-    gameOver = predictionRound(players, numPlayers, &pot, 1, communityCards, cardsRevealed);
+    printf("\n--- Pre-flop Predictions ---\n");
+    int currentBetAmount = BIG_BLIND;
+    int startPosition = findNextActivePlayer(players, numPlayers, bigBlindPos, 1); // Start with player after big blind
+    gameOver = predictionRound(players, numPlayers, &pot, 1, communityCards, cardsRevealed, startPosition, &currentBetAmount);
+
     if (gameOver) {
         int result = endGame(players, numPlayers, pot, communityCards);
         freeHand(deck, 1);
         freeHand(communityCards, 1);
         return result;
     }
+
+    // Reset player bets for new round
+    resetCurrentBets(players, numPlayers);
+    currentBetAmount = 0;
 
     cardsRevealed = 3;
     printf("\n--- The flop is: ");
@@ -138,14 +176,20 @@ int playHand(int numPlayers, Player players[])
     }
     printf("---\n");
 
-    printf("\n--- Round 2 Predictions ---\n");
-    gameOver = predictionRound(players, numPlayers, &pot, 2, communityCards, cardsRevealed);
+    printf("\n--- Flop Predictions ---\n");
+    startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
+    gameOver = predictionRound(players, numPlayers, &pot, 2, communityCards, cardsRevealed, startPosition, &currentBetAmount);
+
     if (gameOver) {
         int result = endGame(players, numPlayers, pot, communityCards);
         freeHand(deck, 1);
         freeHand(communityCards, 1);
         return result;
     }
+
+    // Reset player bets for new round
+    resetCurrentBets(players, numPlayers);
+    currentBetAmount = 0;
 
     cardsRevealed = 4;
     printf("\n--- Turn revealed: ");
@@ -154,8 +198,10 @@ int playHand(int numPlayers, Player players[])
     printCard(cardStr, c);
     printf("%s ---\n", cardStr);
 
-    printf("\n--- Round 3 Predictions ---\n");
-    gameOver = predictionRound(players, numPlayers, &pot, 3, communityCards, cardsRevealed);
+    printf("\n--- Turn Predictions ---\n");
+    startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
+    gameOver = predictionRound(players, numPlayers, &pot, 3, communityCards, cardsRevealed, startPosition, &currentBetAmount);
+
     if (gameOver) {
         int result = endGame(players, numPlayers, pot, communityCards);
         freeHand(deck, 1);
@@ -163,28 +209,65 @@ int playHand(int numPlayers, Player players[])
         return result;
     }
 
+    // Reset player bets for new round
+    resetCurrentBets(players, numPlayers);
+    currentBetAmount = 0;
+
     cardsRevealed = 5;
     printf("\n--- River revealed: ");
     c = getCard(communityCards, 4);
     printCard(cardStr, c);
     printf("%s ---\n", cardStr);
 
-    printf("\n--- Final Prediction Round ---\n");
-    gameOver = predictionRound(players, numPlayers, &pot, 4, communityCards, cardsRevealed);
+    printf("\n--- River Predictions ---\n");
+    startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
+    gameOver = predictionRound(players, numPlayers, &pot, 4, communityCards, cardsRevealed, startPosition, &currentBetAmount);
 
     int result = endGame(players, numPlayers, pot, communityCards);
     freeHand(deck, 1);
     freeHand(communityCards, 1);
 
+    // Move dealer position to next active player for next hand
+    players[currentDealer].dealer = false;
+    int nextDealer = findNextActivePlayer(players, numPlayers, currentDealer, 1);
+    players[nextDealer].dealer = true;
+
     return result;
 }
 
-bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, Hand *communityCards, int cardsRevealed)
-{
+// Find the next active player in the circle
+int findNextActivePlayer(Player players[], int numPlayers, int currentPos, int offset) {
+    int count = 0;
+    int pos = currentPos;
+
+    while (count < numPlayers) {
+        pos = (pos + offset) % numPlayers;
+        if (players[pos].status == ACTIVE) {
+            return pos;
+        }
+        count++;
+    }
+
+    // If we get here, there's no active player (should never happen)
+    return currentPos;
+}
+
+// Reset current bets for all players
+void resetCurrentBets(Player players[], int numPlayers) {
+    for (int i = 0; i < numPlayers; i++) {
+        players[i].currentBet = 0;
+    }
+}
+
+bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, Hand* communityCards, int cardsRevealed, int startPosition, int *currentBetAmount) {
     int activePlayers = 0;
     char input;
     int prediction;
     char predictionAmount[50];
+    bool roundComplete = false;
+    int currentPlayer = startPosition;
+    int playersActed = 0;
+    int playersAllIn = 0;
 
     // Count active players
     for (int i = 0; i < numPlayers; i++) {
@@ -200,99 +283,158 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
         return true; // Activate game over sequence
     }
 
-    for(int i = 0; i < numPlayers; i++)
-    {
-        if(players[i].status == ACTIVE)
-        {
-            char handStr[100];
-            printHand(handStr, players[i].hand);
-            printf("\n%s, these are your cards: %s", players[i].name, handStr);
-
-            if(cardsRevealed > 0)
-            {
-                printf("\nCommunity cards: ");
-                for(int j = 0; j < cardsRevealed; j++)
-                {
-                    char cardStr[4];
-                    Card *c = getCard(communityCards, j);
-                    printCard(cardStr, c);
-                    printf("%s ", cardStr);
-                }
-                printf("\n");
-            }
-
-            printf("\nYou have %d credits, what would you like to do?\n", players[i].credits);
-            printf("Call/Check - C\nRaise - R\nFold - F\n? : ");
-            scanf(" %c", &input);
-            clearInputBuffer();  // Clear the input buffer
-
-            switch(input)
-            {
-                case 'C':
-                case 'c':
-                    // Hard coded amount for time being
-                    prediction = 10;
-                    if (prediction > players[i].credits)
-                    {
-                        prediction = players[i].credits;
-                    }
-
-                    printf("%s calls with %d credits\n", players[i].name, prediction);
-                    players[i].credits -= prediction;
-                    *pot += prediction;
-                    break;
-
-                case 'R':
-                case 'r':
-                    printf("How much would you like to raise? ");
-                    scanf("%s", predictionAmount);
-                    clearInputBuffer();  // Clear the input buffer
-                    prediction = atoi(predictionAmount);
-
-                    if (prediction <= 0 || prediction > players[i].credits) {
-                        printf("Invalid bet amount. Defaulting to 20 credits.\n");
-                        prediction = players[i].credits < 20 ? players[i].credits : 20;
-                    }
-
-                    printf("%s raises with %d credits\n", players[i].name, prediction);
-                    players[i].credits -= prediction;
-                    *pot += prediction;
-                    break;
-
-                case 'F':
-                case 'f':
-                    printf("%s folds\n", players[i].name);
-                    players[i].status = FOLDED;
-                    activePlayers--;
-
-                    if (activePlayers <= 1) {
-                        printf("Only one player left in the game.\n");
-                        return true; // Game over - only one player left
-                    }
-                    break;
-
-                default:
-                    printf("Invalid choice, defaulting to call.\n");
-                    prediction = 10;
-                    if (prediction > players[i].credits) {
-                        prediction = players[i].credits;
-                    }
-                    printf("%s calls with %d credits\n", players[i].name, prediction);
-                    players[i].credits -= prediction;
-                    *pot += prediction;
-                    break;
-            }
-
-            printf("%s, you now have %d credits\n", players[i].name, players[i].credits);
+    // Continue the betting round until all active players have acted and all bets are matched
+    while (!roundComplete) {
+        // Skip players who have folded or are not playing
+        if (players[currentPlayer].status != ACTIVE) {
+            currentPlayer = (currentPlayer + 1) % numPlayers;
+            continue;
         }
+
+        // Check if betting round is complete
+        if (playersActed >= activePlayers && allBetsMatched(players, numPlayers, *currentBetAmount)) {
+            roundComplete = true;
+            break;
+        }
+
+        char handStr[100];
+        printHand(handStr, players[currentPlayer].hand);
+        printf("\n%s, these are your cards: %s", players[currentPlayer].name, handStr);
+
+        if (cardsRevealed > 0) {
+            printf("\nCommunity cards: ");
+            for (int j = 0; j < cardsRevealed; j++) {
+                char cardStr[4];
+                Card *c = getCard(communityCards, j);
+                printCard(cardStr, c);
+                printf("%s ", cardStr);
+            }
+            printf("\n");
+        }
+
+        int toCall = *currentBetAmount - players[currentPlayer].currentBet;
+
+        printf("\nYou have %d credits, current bet is %d", players[currentPlayer].credits, *currentBetAmount);
+
+        if (toCall > 0) {
+            printf(", %d to call", toCall);
+            printf("\nCall (%d) - C\nRaise - R\nFold - F\n? : ", toCall);
+        } else {
+            printf("\nCheck - C\nRaise - R\nFold - F\n? : ");
+        }
+
+        scanf(" %c", &input);
+        clearInputBuffer();  // Clear the input buffer
+
+        switch(input) {
+            case 'C':
+            case 'c':
+                if (toCall > 0) {
+                    // Call
+                    prediction = toCall;
+                    if (prediction > players[currentPlayer].credits) {
+                        // All-in
+                        prediction = players[currentPlayer].credits;
+                        printf("%s calls all-in with %d credits\n", players[currentPlayer].name, prediction);
+                        playersAllIn++;
+                    } else {
+                        printf("%s calls with %d credits\n", players[currentPlayer].name, prediction);
+                    }
+                } else {
+                    // Check
+                    prediction = 0;
+                    printf("%s checks\n", players[currentPlayer].name);
+                }
+
+                players[currentPlayer].credits -= prediction;
+                players[currentPlayer].currentBet += prediction;
+                *pot += prediction;
+                break;
+
+            case 'R':
+            case 'r':
+                printf("How much would you like to raise to? (Current bet: %d) ", *currentBetAmount);
+                scanf("%s", predictionAmount);
+                clearInputBuffer();  // Clear the input buffer
+                prediction = atoi(predictionAmount);
+
+                // Validate raise amount
+                if (prediction <= *currentBetAmount) {
+                    printf("Raise must be greater than current bet. Defaulting to minimum raise (%d).\n", *currentBetAmount + 1);
+                    prediction = *currentBetAmount + 1;
+                }
+
+                int totalBet = prediction;  // The total amount player is betting this round
+                int amountToAdd = totalBet - players[currentPlayer].currentBet;  // How much more to add
+
+                // Check if player has enough credits
+                if (amountToAdd > players[currentPlayer].credits) {
+                    // All-in
+                    amountToAdd = players[currentPlayer].credits;
+                    totalBet = players[currentPlayer].currentBet + amountToAdd;
+                    *currentBetAmount = totalBet;  // Update current bet
+                    printf("%s raises all-in to %d credits\n", players[currentPlayer].name, totalBet);
+                    playersAllIn++;
+                } else {
+                    *currentBetAmount = totalBet;  // Update current bet
+                    printf("%s raises to %d credits\n", players[currentPlayer].name, totalBet);
+                }
+
+                players[currentPlayer].credits -= amountToAdd;
+                players[currentPlayer].currentBet = totalBet;
+                *pot += amountToAdd;
+
+                // Reset players acted counter since a new bet was made
+                // This is the key fix - we need to reset the count of players who have acted
+                // when someone raises, so that everyone gets a chance to respond to the new bet
+                playersActed = 1;
+                break;
+
+            case 'F':
+            case 'f':
+                printf("%s folds\n", players[currentPlayer].name);
+                players[currentPlayer].status = FOLDED;
+                activePlayers--;
+
+                if (activePlayers <= 1) {
+                    printf("Only one player left in the game.\n");
+                    return true; // Game over - only one player left
+                }
+                break;
+
+            default:
+                printf("Invalid choice. Please choose C (Call/Check), R (Raise), or F (Fold).\n");
+                // Don't increment playersActed or move to next player
+                continue;
+        }
+
+        printf("%s, you now have %d credits\n", players[currentPlayer].name, players[currentPlayer].credits);
+
+        // Check if player is all-in
+        if (players[currentPlayer].credits == 0 && players[currentPlayer].status == ACTIVE) {
+            printf("%s is all-in!\n", players[currentPlayer].name);
+            playersAllIn++;
+        }
+
+        playersActed++;
+        currentPlayer = (currentPlayer + 1) % numPlayers;
     }
 
     printf("\nRound %d complete. Pot contains %d credits.\n", roundNum, *pot);
     return false; // Game continues
 }
 
-int endGame(Player players[], int numPlayers, int pot, Hand* communityCards)
-{
+// Check if all active players have matched the current bet
+bool allBetsMatched(Player players[], int numPlayers, int currentBet) {
+    for (int i = 0; i < numPlayers; i++) {
+        if (players[i].status == ACTIVE && players[i].currentBet < currentBet && players[i].credits > 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int endGame(Player players[], int numPlayers, int pot, Hand* communityCards) {
     int winner = -1;
     int activeCount = 0;
     char input;
@@ -304,18 +446,14 @@ int endGame(Player players[], int numPlayers, int pot, Hand* communityCards)
         }
     }
 
-    if (activeCount == 0)
-    {
+    if (activeCount == 0) {
         printf("\nNo active players left! The pot of %d credits goes to the house.\n", pot);
         return 0;
-    }
-    else if (activeCount == 1)
-    {
+    } else if (activeCount == 1) {
         printf("\nGame over! %s wins the pot of %d credits by default as the only remaining player!\n",
                players[winner].name, pot);
         players[winner].credits += pot;
-    }
-    else {
+    } else {
         // Multiple active players - determine winner based on hand strength
         HandScore bestScores[MAXPLAYERS];
         char handDescriptions[MAXPLAYERS][100];
@@ -362,23 +500,17 @@ int endGame(Player players[], int numPlayers, int pot, Hand* communityCards)
                players[winner].name, handDescriptions[winner]);
         printf("%s wins the pot of %d credits!\n", players[winner].name, pot);
         players[winner].credits += pot;
-
-        // Free the temporary community cards
-        freeHand(communityCards, 1);
     }
 
     // Show final credits
     printf("\nFinal credits:\n");
-    for (int i = 0; i < numPlayers; i++)
-    {
+    for (int i = 0; i < numPlayers; i++) {
         printf("%s: %d credits\n", players[i].name, players[i].credits);
     }
 
     // Mark players with no credits left as not playing
-    for (int i = 0; i < numPlayers; i++)
-    {
-        if (players[i].credits <= 0)
-        {
+    for (int i = 0; i < numPlayers; i++) {
+        if (players[i].credits <= 0) {
             printf("%s is out of credits and has been removed from the game.\n", players[i].name);
             players[i].status = NOT_PLAYING;
         }
@@ -408,7 +540,7 @@ int endGame(Player players[], int numPlayers, int pot, Hand* communityCards)
 void combineCards(Player *player, Hand *communityCards, Card combined[], int *numCards) {
     *numCards = 0;
 
-    // Add player's hole cards
+    // Add player's cards
     Card *current = player->hand->first;
     while (current != NULL) {
         combined[(*numCards)++] = *current;
@@ -422,5 +554,3 @@ void combineCards(Player *player, Hand *communityCards, Card combined[], int *nu
         current = current->next;
     }
 }
-
-

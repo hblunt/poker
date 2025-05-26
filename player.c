@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +29,8 @@ int setup(Player players[]) {
         players[i].credits = STARTING_CREDITS;
         players[i].status = ACTIVE;
         players[i].hand = createHand();
+        players[i].dealer = (i == 0) ? true : false; // First player is dealer initially
+        players[i].currentBet = 0;
     }
 
     return numPlayers;

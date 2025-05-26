@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1747287304 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\main.c
+1747888194 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\main.c
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
@@ -10,11 +10,12 @@
 	"player.h"
 	"scoringsystem.h"
 
-1747287458 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\game.h
+1747718529 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\game.h
 	"player.h"
 	"scoringsystem.h"
 
-1747287398 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\player.h
+1747718508 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\player.h
+	<stdbool.h>
 	"cards.h"
 
 1747287100 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\cards.h
@@ -32,11 +33,17 @@
 	<string.h>
 	"cards.h"
 
-1747287370 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\scoringsystem.c
+1747716875 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\scoringsystem.c
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
 	<math.h>
 	<stdbool.h>
 	"scoringsystem.h"
+
+1747718470 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\player.c
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	"player.h"
 
