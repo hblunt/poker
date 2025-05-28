@@ -8,6 +8,7 @@
 #define BIG_BLIND 10
 
 void dealHand(Player players[], int numPlayers, Hand *deck, Hand *communityCards);
+int playHandAI(int numPlayers, Player players[]);
 int playHand(int numPlayers, Player players[]);
 bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, Hand* communityCards, int cardsRevealed, int startPosition, int *currentBetAmount);
 int endGame(Player players[], int numPlayers, int pot, Hand* communityCards);

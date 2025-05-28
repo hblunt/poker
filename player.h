@@ -25,5 +25,6 @@ typedef struct {
 
 void clearInputBuffer();
 int setup(Player players[]);
+int setupWithAI(Player players[]);
 
 #endif

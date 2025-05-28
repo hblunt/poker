@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1747888194 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\main.c
+1748323343 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\main.c
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
@@ -9,12 +9,15 @@
 	"cards.h"
 	"player.h"
 	"scoringsystem.h"
+	"neuralnetwork.h"
+	"aiplayer.h"
+	"traininggenerator.c"
 
-1747718529 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\game.h
+1748323052 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\game.h
 	"player.h"
 	"scoringsystem.h"
 
-1747718508 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\player.h
+1748323033 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\player.h
 	<stdbool.h>
 	"cards.h"
 
@@ -41,9 +44,51 @@
 	<stdbool.h>
 	"scoringsystem.h"
 
-1747718470 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\player.c
+1748323043 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\player.c
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
 	"player.h"
+
+1748323203 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\aiplayer.c
+	"neuralnetwork.h"
+	"player.h"
+	"game.h"
+	<string.h>
+
+1748236871 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\neuralnetwork.h
+	<stdio.h>
+	<stdlib.h>
+	<math.h>
+	<stdbool.h>
+	"scoringsystem.h"
+	"player.h"
+
+1748323333 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\traininggenerator.c
+	"neuralnetwork.h"
+	"cards.h"
+	"player.h"
+	"scoringsystem.h"
+	<stdio.h>
+	<stdlib.h>
+	<time.h>
+
+1748319823 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\aiplayer.h
+	"player.h"
+	"cards.h"
+
+1748323333 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\traininggenerator.c
+	"neuralnetwork.h"
+	"cards.h"
+	"player.h"
+	"scoringsystem.h"
+	<stdio.h>
+	<stdlib.h>
+	<time.h>
+
+1748323705 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\neuralnetwork.c
+	"neuralnetwork.h"
+	"game.h"
+	<string.h>
+	<time.h>
 

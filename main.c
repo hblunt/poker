@@ -7,15 +7,47 @@
 #include "cards.h"
 #include "player.h"
 #include "scoringsystem.h"
+#include "neuralnetwork.h"
+#include "aiplayer.h"
+#include "traininggenerator.h"
 
 int main(void)
 {
     int numPlayers;
     Player players[MAXPLAYERS];
+    char choice;
 
     srand(time(NULL));
 
-    numPlayers = setup(players);
+    printf("WELCOME TO POKER\n");
+    printf("1. Play against AI\n");
+    printf("2. Train new AI\n");
+    printf("3. Play without AI\n");
+    printf("Choice: ");
+    scanf(" %c", &choice);
+    clearInputBuffer();
+
+    switch(choice) {
+        case '1':
+            // Initialize AI system
+            initialiseAI();
+            numPlayers = setupWithAI(players);
+            break;
+
+        case '2':
+            // Train AI first
+            trainBasicAI();
+            printf("\nPress Enter to continue...");
+            getchar();
+            initialiseAI();
+            numPlayers = setupWithAI(players);
+            break;
+
+        case '3':
+        default:
+            numPlayers = setup(players);
+            break;
+    }
 
     printf("\nPlaying with %d players: ", numPlayers);
 
@@ -34,8 +66,22 @@ int main(void)
     }
     printf("\n");
 
-    playHand(numPlayers, players);
+    // Check which loop to use
+    bool hasAI = false;
+    for (int i = 0; i < numPlayers; i++) {
+        if (strncmp(players[i].name, "AI_", 3) == 0) {
+            hasAI = true;
+            break;
+        }
+    }
 
+    if (hasAI) {
+        playHandAI(numPlayers, players);
+    } else {
+        playHand(numPlayers, players);
+    }
+
+    // Cleanup
     for(int i = 0; i < numPlayers; i++)
     {
         if(players[i].hand)
@@ -44,7 +90,170 @@ int main(void)
         }
     }
 
+    if (hasAI) {
+        saveAI();
+        cleanAI();
+    }
+
     return 0;
+}
+
+int playHandAI(int numPlayers, Player players[])
+{
+    int pot = 0;
+    int cardsRevealed = 0;
+    bool gameOver = false;
+    int activePlayers = 0;
+    int currentDealer = players[0].dealer ? 0 : -1;
+
+    // Count active players before starting and find current dealer
+    for (int i = 0; i < numPlayers; i++) {
+        if (players[i].status == ACTIVE || players[i].status == FOLDED) {
+            if (players[i].credits > 0) {
+                players[i].status = ACTIVE;
+                activePlayers++;
+            } else {
+                players[i].status = NOT_PLAYING;
+            }
+        }
+
+        if (players[i].dealer) {
+            currentDealer = i;
+        }
+    }
+
+    // If no dealer is set, assign to the first active player
+    if (currentDealer == -1) {
+        for (int i = 0; i < numPlayers; i++) {
+            if (players[i].status == ACTIVE) {
+                players[i].dealer = true;
+                currentDealer = i;
+                break;
+            }
+        }
+    }
+
+    if (activePlayers < 2) {
+        printf("Not enough active players to start a game.\n");
+        return 0;
+    }
+
+    // Create new deck and community cards
+    Hand *deck = createDeck(1, 1);
+    Hand *communityCards = createHand();
+
+    // Calculate positions for small blind and big blind
+    int smallBlindPos = findNextActivePlayer(players, numPlayers, currentDealer, 1);
+    int bigBlindPos = findNextActivePlayer(players, numPlayers, smallBlindPos, 1);
+
+    // Take blinds from players
+    printf("\n%s is the dealer\n", players[currentDealer].name);
+    printf("%s posts small blind of %d credits\n", players[smallBlindPos].name, SMALL_BLIND);
+    int smallBlindAmount = (players[smallBlindPos].credits >= SMALL_BLIND) ? SMALL_BLIND : players[smallBlindPos].credits;
+    players[smallBlindPos].credits -= smallBlindAmount;
+    players[smallBlindPos].currentBet = smallBlindAmount;
+    pot += smallBlindAmount;
+
+    printf("%s posts big blind of %d credits\n", players[bigBlindPos].name, BIG_BLIND);
+    int bigBlindAmount = (players[bigBlindPos].credits >= BIG_BLIND) ? BIG_BLIND : players[bigBlindPos].credits;
+    players[bigBlindPos].credits -= bigBlindAmount;
+    players[bigBlindPos].currentBet = bigBlindAmount;
+    pot += bigBlindAmount;
+
+    dealHand(players, numPlayers, deck, communityCards);
+
+    printf("\nStarting hand with %d active players\n", activePlayers);
+
+    // Pre-flop
+    printf("\n--- Pre-flop Predictions ---\n");
+    int currentBetAmount = BIG_BLIND;
+    int startPosition = findNextActivePlayer(players, numPlayers, bigBlindPos, 1);
+    gameOver = aiPredictionRound(players, numPlayers, &pot, 1, communityCards, cardsRevealed, startPosition, &currentBetAmount);
+
+    if (gameOver) {
+        int result = endGame(players, numPlayers, pot, communityCards);
+        freeHand(deck, 1);
+        freeHand(communityCards, 1);
+        return result;
+    }
+
+    // Continue with flop, turn, river using aiPredictionRound...
+    // (Rest of the game loop remains the same but uses aiPredictionRound instead of predictionRound)
+
+    // The rest follows the same pattern as the original playHand function
+    // but uses aiPredictionRound for each betting round
+
+    // Reset player bets for new round
+    resetCurrentBets(players, numPlayers);
+    currentBetAmount = 0;
+
+    cardsRevealed = 3;
+    printf("\n--- The flop is: ");
+    for (int i = 0; i < cardsRevealed; i++) {
+        char cardStr[4];
+        Card *c = getCard(communityCards, i);
+        printCard(cardStr, c);
+        printf("%s ", cardStr);
+    }
+    printf("---\n");
+
+    printf("\n--- Flop Predictions ---\n");
+    startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
+    gameOver = predictionRound(players, numPlayers, &pot, 2, communityCards, cardsRevealed, startPosition, &currentBetAmount);
+
+    if (gameOver) {
+        int result = endGame(players, numPlayers, pot, communityCards);
+        freeHand(deck, 1);
+        freeHand(communityCards, 1);
+        return result;
+    }
+
+    // Reset player bets for new round
+    resetCurrentBets(players, numPlayers);
+    currentBetAmount = 0;
+
+    cardsRevealed = 4;
+    printf("\n--- Turn revealed: ");
+    char cardStr[4];
+    Card *c = getCard(communityCards, 3);
+    printCard(cardStr, c);
+    printf("%s ---\n", cardStr);
+
+    printf("\n--- Turn Predictions ---\n");
+    startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
+    gameOver = aiPredictionRound(players, numPlayers, &pot, 3, communityCards, cardsRevealed, startPosition, &currentBetAmount);
+
+    if (gameOver) {
+        int result = endGame(players, numPlayers, pot, communityCards);
+        freeHand(deck, 1);
+        freeHand(communityCards, 1);
+        return result;
+    }
+
+    // Reset player bets for new round
+    resetCurrentBets(players, numPlayers);
+    currentBetAmount = 0;
+
+    cardsRevealed = 5;
+    printf("\n--- River revealed: ");
+    c = getCard(communityCards, 4);
+    printCard(cardStr, c);
+    printf("%s ---\n", cardStr);
+
+    printf("\n--- River Predictions ---\n");
+    startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
+    gameOver =aiPredictionRound(players, numPlayers, &pot, 4, communityCards, cardsRevealed, startPosition, &currentBetAmount);
+
+    int result = endGame(players, numPlayers, pot, communityCards);
+    freeHand(deck, 1);
+    freeHand(communityCards, 1);
+
+    // Move dealer position to next active player for next hand
+    players[currentDealer].dealer = false;
+    int nextDealer = findNextActivePlayer(players, numPlayers, currentDealer, 1);
+    players[nextDealer].dealer = true;
+
+    return result;
 }
 
 void dealHand(Player players[], int numPlayers, Hand *deck, Hand *communityCards) {
