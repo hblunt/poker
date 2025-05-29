@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1748323343 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\main.c
+1748494173 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\main.c
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
@@ -11,9 +11,10 @@
 	"scoringsystem.h"
 	"neuralnetwork.h"
 	"aiplayer.h"
-	"traininggenerator.c"
+	"aiperformance.h"
+	"selftrain.h"
 
-1748323052 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\game.h
+1748396683 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\game.h
 	"player.h"
 	"scoringsystem.h"
 
@@ -44,13 +45,13 @@
 	<stdbool.h>
 	"scoringsystem.h"
 
-1748323043 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\player.c
+1748492505 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\player.c
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
 	"player.h"
 
-1748323203 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\aiplayer.c
+1748492856 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\aiplayer.c
 	"neuralnetwork.h"
 	"player.h"
 	"game.h"
@@ -64,7 +65,7 @@
 	"scoringsystem.h"
 	"player.h"
 
-1748323333 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\traininggenerator.c
+1748484077 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\traininggenerator.c
 	"neuralnetwork.h"
 	"cards.h"
 	"player.h"
@@ -73,7 +74,7 @@
 	<stdlib.h>
 	<time.h>
 
-1748319823 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\aiplayer.h
+1748410120 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\aiplayer.h
 	"player.h"
 	"cards.h"
 
@@ -86,9 +87,48 @@
 	<stdlib.h>
 	<time.h>
 
-1748323705 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\neuralnetwork.c
+1748494935 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\neuralnetwork.c
 	"neuralnetwork.h"
 	"game.h"
 	<string.h>
 	<time.h>
+
+1748409752 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\traininggenerator.h
+	"neuralnetwork.h"
+	"cards.h"
+	"player.h"
+	"scoringsystem.h"
+
+1748426518 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\aiperformance.h
+	"player.h"
+	"cards.h"
+
+1748426461 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\aiperformance.c
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<time.h>
+	"neuralnetwork.h"
+	"aiplayer.h"
+	"player.h"
+	"game.h"
+	"cards.h"
+
+1748494098 c:\users\holly\onedrive\documents\uni\engineering c\program\card game\selftrain.h
+	"neuralnetwork.h"
+	"player.h"
+
+1748494050 source:c:\users\holly\onedrive\documents\uni\engineering c\program\card game\selftrain.c
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<time.h>
+	<math.h>
+	"neuralnetwork.h"
+	"aiplayer.h"
+	"player.h"
+	"game.h"
+	"cards.h"
+	"scoringsystem.h"
+	"selftrain.h"
 

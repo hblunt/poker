@@ -3,29 +3,35 @@
 #include "game.h"
 #include <string.h>
 
-static NeuralNetwork *aiNetwork = NULL;
+NeuralNetwork *aiNetwork = NULL;
 
 void initialiseAI()
 {
-    aiNetwork = loadNetwork("poker_ai.dat");
+    aiNetwork = loadNetwork("poker_ai_selfplay.dat");  // Load self-play network first
 
     if (!aiNetwork)
     {
-        printf("Creating new neural network");
-        {
-            aiNetwork = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-        }
+        aiNetwork = loadNetwork("poker_ai.dat");  // Fall back to basic if not found
     }
 }
 
 int aiMakeDecision(Player *player, Hand *communityCards, int pot, int currentBet, int numPlayers, int position)
 {
-    if (aiNetwork)
+    if (!aiNetwork)
     {
         initialiseAI();
     }
 
-    return makeDecision(aiNetwork, player, communityCards, pot, currentBet, numPlayers, position);
+    int decision = makeDecision(aiNetwork, player, communityCards, pot, currentBet, numPlayers, position);
+
+    // Debug output
+    printf("\nAI Debug - Fold: %.3f, Call: %.3f, Raise: %.3f -> Decision: %d\n",
+           aiNetwork->outputLayer[0].value,
+           aiNetwork->outputLayer[1].value,
+           aiNetwork->outputLayer[2].value,
+           decision);
+
+    return decision;
 }
 
 bool aiPredictionRound(Player players[],int numPlayers, int *pot, int roundNum, Hand* communityCards, int cardsRevealed, int startPosition, int *currentBetAmount)
@@ -66,7 +72,7 @@ bool aiPredictionRound(Player players[],int numPlayers, int *pot, int roundNum, 
         int toCall = *currentBetAmount - players[currentPlayer].currentBet;
 
         // Check if this is an AI player (name starts with "AI_")
-        if (strncmp(players[currentPlayer].name, "AI_", 3) == 0) {
+        if (strncmp(players[currentPlayer].name, "AI ", 3) == 0) {
             // AI decision
             int decision = aiMakeDecision(&players[currentPlayer], communityCards,
                                         *pot, *currentBetAmount, activePlayers, currentPlayer);
@@ -74,13 +80,13 @@ bool aiPredictionRound(Player players[],int numPlayers, int *pot, int roundNum, 
             printf("\n%s (AI) is thinking...\n", players[currentPlayer].name);
 
             switch(decision) {
-                case 0: // Fold
+                case 0:
                     printf("%s (AI) folds\n", players[currentPlayer].name);
                     players[currentPlayer].status = FOLDED;
                     activePlayers--;
                     break;
 
-                case 1: // Call/Check
+                case 1:
                     if (toCall > 0) {
                         prediction = toCall;
                         if (prediction > players[currentPlayer].credits) {
@@ -99,9 +105,10 @@ bool aiPredictionRound(Player players[],int numPlayers, int *pot, int roundNum, 
                     players[currentPlayer].credits -= prediction;
                     players[currentPlayer].currentBet += prediction;
                     *pot += prediction;
+                    pause();
                     break;
 
-                case 2: // Raise
+                case 2:
                     // AI raises by 2x the big blind
                     int raiseAmount = *currentBetAmount + (2 * BIG_BLIND);
                     if (raiseAmount > players[currentPlayer].credits + players[currentPlayer].currentBet) {
@@ -119,6 +126,7 @@ bool aiPredictionRound(Player players[],int numPlayers, int *pot, int roundNum, 
                     *pot += amountToAdd;
 
                     playersActed = 1; // Reset since we raised
+                    pause();
                     break;
             }
 
@@ -178,6 +186,7 @@ bool aiPredictionRound(Player players[],int numPlayers, int *pot, int roundNum, 
                     players[currentPlayer].credits -= prediction;
                     players[currentPlayer].currentBet += prediction;
                     *pot += prediction;
+                    pause();
                     break;
 
                 case 'R':
@@ -210,6 +219,7 @@ bool aiPredictionRound(Player players[],int numPlayers, int *pot, int roundNum, 
                     players[currentPlayer].currentBet = totalBet;
                     *pot += amountToAdd;
                     playersActed = 1;
+                    pause();
                     break;
 
                 case 'F':
@@ -221,6 +231,7 @@ bool aiPredictionRound(Player players[],int numPlayers, int *pot, int roundNum, 
                     if (activePlayers <= 1) {
                         return true;
                     }
+                    pause();
                     break;
 
                 default:
@@ -245,11 +256,7 @@ bool aiPredictionRound(Player players[],int numPlayers, int *pot, int roundNum, 
 
 void saveAI()
 {
-    if (aiNetwork)
-    {
-        saveNetwork(aiNetwork, "poker_ai.dat");
-        printf("AI network saved.\n");
-    }
+    saveNetwork(aiNetwork, "poker_ai_selfplay.dat");
 }
 
 void cleanAI()

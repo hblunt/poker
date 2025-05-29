@@ -72,7 +72,7 @@ int setupWithAI(Player players[])
 
     // Set up AI players
     for (int i = numPlayers - numAI; i < numPlayers; i++) {
-        sprintf(players[i].name, "AI_Bot_%d", i - (numPlayers - numAI) + 1);
+        sprintf(players[i].name, "AI Bot %d", i - (numPlayers - numAI) + 1);
         players[i].credits = STARTING_CREDITS;
         players[i].status = ACTIVE;
         players[i].hand = createHand();

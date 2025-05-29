@@ -9,7 +9,8 @@
 #include "scoringsystem.h"
 #include "neuralnetwork.h"
 #include "aiplayer.h"
-#include "traininggenerator.h"
+#include "aiperformance.h"
+#include "selftrain.h"
 
 int main(void)
 {
@@ -19,10 +20,11 @@ int main(void)
 
     srand(time(NULL));
 
-    printf("WELCOME TO POKER\n");
+    printf("--- GU Hold'em ---\n\n");
     printf("1. Play against AI\n");
-    printf("2. Train new AI\n");
-    printf("3. Play without AI\n");
+    printf("2. Basic AI training\n");
+    printf("3. Advanced self-play training\n");
+    printf("4. Play without AI\n\n");
     printf("Choice: ");
     scanf(" %c", &choice);
     clearInputBuffer();
@@ -35,15 +37,25 @@ int main(void)
             break;
 
         case '2':
-            // Train AI first
+            // Basic training
             trainBasicAI();
-            printf("\nPress Enter to continue...");
-            getchar();
+            pause();
             initialiseAI();
             numPlayers = setupWithAI(players);
             break;
 
         case '3':
+            // Advanced self-play training
+            advancedSelfPlayTraining();
+            pause();
+            initialiseAI();
+            numPlayers = setupWithAI(players);
+            break;
+
+        case '4':
+            numPlayers = setup(players);
+            break;
+
         default:
             numPlayers = setup(players);
             break;
@@ -66,10 +78,9 @@ int main(void)
     }
     printf("\n");
 
-    // Check which loop to use
     bool hasAI = false;
     for (int i = 0; i < numPlayers; i++) {
-        if (strncmp(players[i].name, "AI_", 3) == 0) {
+        if (strncmp(players[i].name, "AI ", 3) == 0) {
             hasAI = true;
             break;
         }
@@ -96,6 +107,21 @@ int main(void)
     }
 
     return 0;
+}
+
+void clearScreen()
+{
+    #ifdef _WIN32
+             system("cls");
+         #else
+             system("clear");
+         #endif
+}
+
+void pause() {
+    printf("\nPress Enter to continue...");
+    getchar();
+    clearScreen();
 }
 
 int playHandAI(int numPlayers, Player players[])
@@ -163,9 +189,10 @@ int playHandAI(int numPlayers, Player players[])
     dealHand(players, numPlayers, deck, communityCards);
 
     printf("\nStarting hand with %d active players\n", activePlayers);
+    pause();
 
     // Pre-flop
-    printf("\n--- Pre-flop Predictions ---\n");
+    printf("--- Pre-flop Predictions ---\n");
     int currentBetAmount = BIG_BLIND;
     int startPosition = findNextActivePlayer(players, numPlayers, bigBlindPos, 1);
     gameOver = aiPredictionRound(players, numPlayers, &pot, 1, communityCards, cardsRevealed, startPosition, &currentBetAmount);
@@ -177,16 +204,11 @@ int playHandAI(int numPlayers, Player players[])
         return result;
     }
 
-    // Continue with flop, turn, river using aiPredictionRound...
-    // (Rest of the game loop remains the same but uses aiPredictionRound instead of predictionRound)
-
-    // The rest follows the same pattern as the original playHand function
-    // but uses aiPredictionRound for each betting round
-
-    // Reset player bets for new round
+    // Same as playHand(), except with aiPredictionRound() instead
     resetCurrentBets(players, numPlayers);
     currentBetAmount = 0;
 
+    clearScreen();
     cardsRevealed = 3;
     printf("\n--- The flop is: ");
     for (int i = 0; i < cardsRevealed; i++) {
@@ -196,10 +218,11 @@ int playHandAI(int numPlayers, Player players[])
         printf("%s ", cardStr);
     }
     printf("---\n");
+    pause();
 
     printf("\n--- Flop Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
-    gameOver = predictionRound(players, numPlayers, &pot, 2, communityCards, cardsRevealed, startPosition, &currentBetAmount);
+    gameOver = aiPredictionRound(players, numPlayers, &pot, 2, communityCards, cardsRevealed, startPosition, &currentBetAmount);
 
     if (gameOver) {
         int result = endGame(players, numPlayers, pot, communityCards);
@@ -212,12 +235,14 @@ int playHandAI(int numPlayers, Player players[])
     resetCurrentBets(players, numPlayers);
     currentBetAmount = 0;
 
+    clearScreen();
     cardsRevealed = 4;
     printf("\n--- Turn revealed: ");
     char cardStr[4];
     Card *c = getCard(communityCards, 3);
     printCard(cardStr, c);
     printf("%s ---\n", cardStr);
+    pause();
 
     printf("\n--- Turn Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
@@ -234,11 +259,13 @@ int playHandAI(int numPlayers, Player players[])
     resetCurrentBets(players, numPlayers);
     currentBetAmount = 0;
 
+    clearScreen();
     cardsRevealed = 5;
     printf("\n--- River revealed: ");
     c = getCard(communityCards, 4);
     printCard(cardStr, c);
     printf("%s ---\n", cardStr);
+    pause();
 
     printf("\n--- River Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
@@ -358,6 +385,7 @@ int playHand(int numPlayers, Player players[]) {
     dealHand(players, numPlayers, deck, communityCards);
 
     printf("\nStarting hand with %d active players\n", activePlayers);
+    pause();
 
     printf("\n--- Pre-flop Predictions ---\n");
     int currentBetAmount = BIG_BLIND;
@@ -384,6 +412,7 @@ int playHand(int numPlayers, Player players[]) {
         printf("%s ", cardStr);
     }
     printf("---\n");
+    pause();
 
     printf("\n--- Flop Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
@@ -400,12 +429,14 @@ int playHand(int numPlayers, Player players[]) {
     resetCurrentBets(players, numPlayers);
     currentBetAmount = 0;
 
+    clearScreen();
     cardsRevealed = 4;
     printf("\n--- Turn revealed: ");
     char cardStr[4];
     Card *c = getCard(communityCards, 3);
     printCard(cardStr, c);
     printf("%s ---\n", cardStr);
+    pause();
 
     printf("\n--- Turn Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
@@ -422,11 +453,13 @@ int playHand(int numPlayers, Player players[]) {
     resetCurrentBets(players, numPlayers);
     currentBetAmount = 0;
 
+    clearScreen();
     cardsRevealed = 5;
     printf("\n--- River revealed: ");
     c = getCard(communityCards, 4);
     printCard(cardStr, c);
     printf("%s ---\n", cardStr);
+    pause();
 
     printf("\n--- River Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
@@ -485,7 +518,7 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
         }
     }
 
-    printf("Active players in round %d: %d\n", roundNum, activePlayers);
+    printf("\nActive players in round %d: %d\n", roundNum, activePlayers);
 
     if (activePlayers <= 1) {
         printf("Not enough active players to continue.\n");
@@ -506,6 +539,8 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
             break;
         }
 
+        pause();
+        printf("--- %s's Turn ---\n", players[currentPlayer].name);
         char handStr[100];
         printHand(handStr, players[currentPlayer].hand);
         printf("\n%s, these are your cards: %s", players[currentPlayer].name, handStr);
@@ -538,6 +573,7 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
         switch(input) {
             case 'C':
             case 'c':
+                clearScreen();
                 if (toCall > 0) {
                     // Call
                     prediction = toCall;
@@ -582,10 +618,12 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
                     amountToAdd = players[currentPlayer].credits;
                     totalBet = players[currentPlayer].currentBet + amountToAdd;
                     *currentBetAmount = totalBet;  // Update current bet
+                    clearScreen();
                     printf("%s raises all-in to %d credits\n", players[currentPlayer].name, totalBet);
                     playersAllIn++;
                 } else {
                     *currentBetAmount = totalBet;  // Update current bet
+                    clearScreen();
                     printf("%s raises to %d credits\n", players[currentPlayer].name, totalBet);
                 }
 
@@ -593,14 +631,12 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
                 players[currentPlayer].currentBet = totalBet;
                 *pot += amountToAdd;
 
-                // Reset players acted counter since a new bet was made
-                // This is the key fix - we need to reset the count of players who have acted
-                // when someone raises, so that everyone gets a chance to respond to the new bet
                 playersActed = 1;
                 break;
 
             case 'F':
             case 'f':
+                clearScreen();
                 printf("%s folds\n", players[currentPlayer].name);
                 players[currentPlayer].status = FOLDED;
                 activePlayers--;
@@ -617,7 +653,9 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
                 continue;
         }
 
-        printf("%s, you now have %d credits\n", players[currentPlayer].name, players[currentPlayer].credits);
+        printf("%s, you now have %d credits\n\n", players[currentPlayer].name, players[currentPlayer].credits);
+
+
 
         // Check if player is all-in
         if (players[currentPlayer].credits == 0 && players[currentPlayer].status == ACTIVE) {
@@ -739,7 +777,21 @@ int endGame(Player players[], int numPlayers, int pot, Hand* communityCards) {
         }
 
         // Play another hand
-        playHand(numPlayers, players);
+
+        bool hasAI = false;
+        for (int i = 0; i < numPlayers; i++) {
+            if (strncmp(players[i].name, "AI ", 3) == 0) {
+                hasAI = true;
+                break;
+            }
+        }
+
+        if(hasAI)
+        {
+            playHandAI(numPlayers, players);
+        } else {
+            playHand(numPlayers, players);
+        }
     }
 
     return 0;

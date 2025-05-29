@@ -45,16 +45,16 @@ NeuralNetwork* createNetwork(int inputSize, int hiddenSize, int outputSize)
     return nn;
 }
 
-// Xavier initialisation for sigmoid function
+// He initialisation for sigmoid function
 void initialiseWeights(NeuralNetwork *nn)
 {
     srand(time(NULL));
 
-    // Initialise input to hidden  weights
-    double limitIH = sqrt(2.0 / (nn->inputSize + nn->outputSize));
+    // Initialise input to hidden weights
+    double limitIH = sqrt(2.0 / nn->inputSize);
     for (int i = 0; i < nn->inputSize; i++)
     {
-        for (int j = 0; j< nn->inputSize; j++)
+        for (int j = 0; j< nn->hiddenSize; j++)
         {
             nn->weightsInputHidden[i][j] = ((double)rand() / RAND_MAX * 2 - 1) * limitIH;
         }
@@ -120,7 +120,7 @@ double activateDerivative(double x, int activationType)
     }
 }
 
-// Forward propagation
+// Forward prop
 void forwardpropagate(NeuralNetwork *nn, double *input)
 {
     // Copy input to input layer
@@ -327,12 +327,22 @@ void train(NeuralNetwork *nn, double **trainingInputs, double **trainingOutputs,
             printf("Epoch %d, Error: %.4f\n", epoch, totalError / numSamples);
         }
     }
+
+    printNetworkState(nn);
 }
 
 void saveNetwork(NeuralNetwork *nn, const char *filename)
 {
+    if (!nn) {
+        printf("Cannot save NULL network\n");
+        return;
+    }
+
     FILE *file = fopen(filename, "wb");
-    if(!file) perror("No network found");
+    if(!file) {
+        perror("Could not save network");
+        return;
+    }
 
     // Save
     fwrite(&nn->inputSize, sizeof(int), 1, file);
@@ -358,7 +368,11 @@ void saveNetwork(NeuralNetwork *nn, const char *filename)
 NeuralNetwork* loadNetwork(const char *filename)
 {
     FILE *file = fopen(filename, "rb");
-    if (!file) perror("Could not load network");
+    if (!file)
+    {
+        perror("Could not load network");
+        return NULL;
+    }
 
     int inputSize, hiddenSize, outputSize;
     fread(&inputSize, sizeof(int), 1, file);

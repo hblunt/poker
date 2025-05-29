@@ -8,6 +8,5 @@
 
 void generateTrainingData(double **inputs, double **outputs, int numSamples);
 void trainBasicAI();
-void selfPlayTraining(int numGames);
 
 #endif

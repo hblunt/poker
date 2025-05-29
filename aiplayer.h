@@ -4,6 +4,7 @@
 #include "player.h"
 #include "cards.h"
 
+extern NeuralNetwork *aiNetwork;
 void initialiseAI();
 void saveAI();
 void cleanAI();

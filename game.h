@@ -16,6 +16,8 @@ void combineCards(Player *player, Hand *communityCards, Card combined[], int *nu
 int findNextActivePlayer(Player players[], int numPlayers, int currentPos, int offset);
 void resetCurrentBets(Player players[], int numPlayers);
 bool allBetsMatched(Player players[], int numPlayers, int currentBet);
+void clearScreen();
+void pause();
 
 #endif
 
