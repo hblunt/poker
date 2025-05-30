@@ -9,7 +9,6 @@
 #include "scoringsystem.h"
 #include "neuralnetwork.h"
 #include "aiplayer.h"
-#include "aiperformance.h"
 #include "selftrain.h"
 
 int main(void)
@@ -38,7 +37,7 @@ int main(void)
 
         case '2':
             // Basic training
-            trainBasicAI();
+            trainEnhancedBasicAI();
             pause();
             initialiseAI();
             numPlayers = setupWithAI(players);
@@ -46,7 +45,7 @@ int main(void)
 
         case '3':
             // Advanced self-play training
-            advancedSelfPlayTraining();
+            enhancedSelfPlayTraining(500, 4);
             pause();
             initialiseAI();
             numPlayers = setupWithAI(players);

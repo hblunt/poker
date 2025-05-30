@@ -3,6 +3,10 @@
 #include <string.h>
 #include <time.h>
 
+// Global opponent tracking
+static OpponentProfile opponentProfiles[MAXPLAYERS];
+static bool profilesInitialized = false;
+
 // Create a NN (memory allocation)
 NeuralNetwork* createNetwork(int inputSize, int hiddenSize, int outputSize)
 {
@@ -208,97 +212,335 @@ void updateWeights(NeuralNetwork *nn)
     }
 }
 
-void encodeGameState(Player *player, Hand *communityCards, int pot, int currentBet, int numPlayers, int position, double *output)
-{
+// REPLACE your existing encodeGameState function with this enhanced version
+void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int currentBet, 
+                           int numPlayers, int position, double *output) {
     memset(output, 0, INPUT_SIZE * sizeof(double));
-
+    
+    // Prepare card arrays
+    Card playerCards[2];
+    Card communityArray[5];
     Card combined[7];
     int numCards = 0;
-
-    // Combine inidividual and community cards
+    int numCommunity = 0;
+    
+    // Extract player cards
     Card *current = player->hand->first;
-    while (current && numCards < 2)
-    {
+    int cardCount = 0;
+    while (current && cardCount < 2) {
+        playerCards[cardCount] = *current;
         combined[numCards++] = *current;
         current = current->next;
+        cardCount++;
     }
-
+    
+    // Extract community cards
     current = communityCards->first;
-    while (current && numCards < 7) {
+    while (current && numCommunity < 5) {
+        communityArray[numCommunity] = *current;
         combined[numCards++] = *current;
         current = current->next;
+        numCommunity++;
     }
-
+    
+    // Calculate hand score
     HandScore score = findBestHand(combined, numCards);
-    // Normalise score between 0-1
-    output[0] = score.rank / 10.0;
-
-    double potOdds = (double)(currentBet - player->currentBet) / (pot+currentBet);
-    output[1] = potOdds;
-
-    output[2] = (double)player->credits / (pot + 1);
-
-    output[3] = (double)position / (numPlayers - 1);
-
-     output[4] = (double)numPlayers / MAXPLAYERS;
-
-    output[5] = (double)currentBet / BIG_BLIND;
-
-    output[6] = (double)player->currentBet / (pot + 1);
-
-    // One-hot encoding of players cards
-    if (player->hand->first)
-    {
-        output[7] = player->hand->first->value / 13.0;
-        output[8] = player->hand->first->suit / 3.0;
-        if (player->hand->first->next)
-        {
-            output[9] = player->hand->first->next->value / 13.0;
-            output[10] = player->hand->first->next->suit / 3.0;
+    
+    // FEATURE 0: Hand strength (improved)
+    output[0] = (double)score.rank / 10.0;
+    
+    // FEATURE 1: Hand potential
+    output[1] = calculateHandPotential(playerCards, communityArray, numCommunity);
+    
+    // FEATURE 2: Board texture
+    output[2] = calculateBoardTexture(communityArray, numCommunity);
+    
+    // FEATURE 3: Pot odds
+    double potOdds = 0.0;
+    if (currentBet > player->currentBet && pot > 0) {
+        potOdds = (double)(currentBet - player->currentBet) / (pot + currentBet);
+    }
+    output[3] = fmin(potOdds, 1.0);
+    
+    // FEATURE 4: Stack to pot ratio
+    output[4] = (double)player->credits / (pot + 1);
+    
+    // FEATURE 5: Position (normalized)
+    output[5] = (double)position / (numPlayers - 1);
+    
+    // FEATURE 6: Number of players (normalized)
+    output[6] = (double)numPlayers / MAXPLAYERS;
+    
+    // FEATURE 7: Current bet relative to big blind
+    output[7] = (double)currentBet / BIG_BLIND;
+    
+    // FEATURE 8: Player's current bet ratio
+    output[8] = (double)player->currentBet / (pot + 1);
+    
+    // FEATURES 9-10: Player's hole cards (normalized)
+    if (cardCount >= 2) {
+        output[9] = (double)playerCards[0].value / 13.0;
+        output[10] = (double)playerCards[1].value / 13.0;
+    }
+    
+    // FEATURE 11: Cards suited (0 or 1)
+    if (cardCount >= 2) {
+        output[11] = (playerCards[0].suit == playerCards[1].suit) ? 1.0 : 0.0;
+    }
+    
+    // FEATURE 12: Community cards revealed phase
+    output[12] = (double)numCommunity / 5.0;
+    
+    // FEATURE 13: Stack committed percentage
+    output[13] = (double)player->currentBet / (player->credits + player->currentBet + 1);
+    
+    // FEATURES 14-16: Opponent modeling (average characteristics)
+    if (profilesInitialized && numPlayers > 1) {
+        double avgAggression = 0.0;
+        double avgTightness = 0.0;
+        double avgFoldToRaise = 0.0;
+        int activeOpponents = 0;
+        
+        for (int i = 0; i < numPlayers; i++) {
+            if (i != position) {  // Don't include self
+                avgAggression += opponentProfiles[i].aggressionLevel;
+                avgTightness += opponentProfiles[i].tightness;
+                avgFoldToRaise += opponentProfiles[i].foldToRaise;
+                activeOpponents++;
+            }
+        }
+        
+        if (activeOpponents > 0) {
+            output[14] = avgAggression / activeOpponents;
+            output[15] = avgTightness / activeOpponents;
+            output[16] = avgFoldToRaise / activeOpponents;
         }
     }
-
-     // 11-14. Community cards revealed
-    int cardsRevealed = 0;
-    current = communityCards->first;
-    while (current && cardsRevealed < 5) {
-        cardsRevealed++;
-        current = current->next;
+    
+    // FEATURE 17: Betting round phase
+    if (numCommunity == 0) output[17] = 0.0;      // Pre-flop
+    else if (numCommunity == 3) output[17] = 0.33; // Flop
+    else if (numCommunity == 4) output[17] = 0.66; // Turn
+    else if (numCommunity == 5) output[17] = 1.0;  // River
+    
+    // FEATURE 18: Relative bet sizing
+    if (pot > 0) {
+        output[18] = (double)(currentBet - player->currentBet) / pot;
     }
-    output[11] = cardsRevealed / 5.0;
-
-    // 12. Aggressive factor (could be tracked over time)
-    output[12] = 0.5;  // Default neutral
-
-    // 13. Round of betting
-    output[13] = cardsRevealed == 0 ? 0.0 : (cardsRevealed - 2) / 3.0;
-
-    // 14. Stack committed
-    output[14] = (double)player->currentBet / (player->credits + player->currentBet + 1);
+    
+    // FEATURE 19: Last action aggression (simplified - can be enhanced)
+    output[19] = 0.5;  // Placeholder for now
+    
+    // FEATURE 20: Pair in hand
+    if (cardCount >= 2) {
+        output[20] = (playerCards[0].value == playerCards[1].value) ? 1.0 : 0.0;
+    }
+    
+    // FEATURE 21: High card strength
+    if (cardCount >= 2) {
+        int highCard = (playerCards[0].value > playerCards[1].value) ? 
+                       playerCards[0].value : playerCards[1].value;
+        output[21] = (double)highCard / 13.0;
+    }
 }
-
-int makeDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, int pot, int currentBet, int numPlayers, int position)
-{
+// Enhanced decision making function
+int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
+                        int pot, int currentBet, int numPlayers, int position) {
     double input[INPUT_SIZE];
-
-    encodeGameState(player, communityCards, pot, currentBet, numPlayers, position, input);
-
+    
+    // Use enhanced game state encoding
+    encodeEnhancedGameState(player, communityCards, pot, currentBet, numPlayers, position, input);
+    
+    // Forward propagation
     forwardpropagate(nn, input);
-
+    
+    // Find best action with improved logic
     int bestAction = 0;
     double bestProb = nn->outputLayer[0].value;
-
-    // Find best action (highest prob)
-    for (int i = 1; i < OUTPUT_SIZE; i++)
-    {
-        if (nn->outputLayer[i].value > bestProb)
-        {
+    
+    for (int i = 1; i < OUTPUT_SIZE; i++) {
+        if (nn->outputLayer[i].value > bestProb) {
             bestProb = nn->outputLayer[i].value;
             bestAction = i;
         }
     }
-
+    
+    // Add some controlled randomness to prevent predictability
+    // This replaces pure randomness with informed randomness
+    double randomFactor = (double)rand() / RAND_MAX;
+    if (randomFactor < 0.1) {  // 10% chance of second-best move
+        double secondBest = 0.0;
+        int secondAction = bestAction;
+        
+        for (int i = 0; i < OUTPUT_SIZE; i++) {
+            if (i != bestAction && nn->outputLayer[i].value > secondBest) {
+                secondBest = nn->outputLayer[i].value;
+                secondAction = i;
+            }
+        }
+        
+        // Only take second-best if it's reasonable (> 20% confidence)
+        if (secondBest > 0.2) {
+            bestAction = secondAction;
+        }
+    }
+    
     return bestAction;
+}
+// Initialize opponent profiles at start of game
+void initializeOpponentProfiles(int numPlayers) {
+    if (!profilesInitialized) {
+        for (int i = 0; i < numPlayers; i++) {
+            opponentProfiles[i].aggressionLevel = 0.5;  // Start neutral
+            opponentProfiles[i].tightness = 0.5;
+            opponentProfiles[i].bluffFrequency = 0.1;   // Conservative estimate
+            opponentProfiles[i].foldToRaise = 0.5;
+            opponentProfiles[i].totalActions = 0;
+            opponentProfiles[i].raiseCount = 0;
+            opponentProfiles[i].callCount = 0;
+            opponentProfiles[i].foldCount = 0;
+            opponentProfiles[i].handsPlayed = 0;
+            opponentProfiles[i].voluntaryPuts = 0;
+        }
+        profilesInitialized = true;
+        printf("Opponent profiles initialized for %d players.\n", numPlayers);
+    }
+}
+
+// Update opponent profile based on their action
+void updateOpponentProfile(int playerIndex, int action, bool voluntaryAction, int betAmount, int potSize) {
+    if (playerIndex < 0 || playerIndex >= MAXPLAYERS) return;
+    
+    OpponentProfile *profile = &opponentProfiles[playerIndex];
+    profile->totalActions++;
+    
+    switch(action) {
+        case 0: // Fold
+            profile->foldCount++;
+            break;
+        case 1: // Call/Check
+            profile->callCount++;
+            if (voluntaryAction) profile->voluntaryPuts++;
+            break;
+        case 2: // Raise
+            profile->raiseCount++;
+            profile->voluntaryPuts++;
+            break;
+    }
+    
+    // Update aggression level (how often they bet/raise vs call/fold)
+    if (profile->totalActions > 5) {  // Need some data first
+        profile->aggressionLevel = (double)(profile->raiseCount) / profile->totalActions;
+        profile->foldToRaise = (double)(profile->foldCount) / profile->totalActions;
+        
+        // Calculate tightness (how selective they are)
+        if (profile->handsPlayed > 0) {
+            profile->tightness = 1.0 - ((double)profile->voluntaryPuts / profile->handsPlayed);
+        }
+    }
+}
+
+// Calculate hand potential - how likely the hand is to improve
+double calculateHandPotential(Card playerCards[], Card communityCards[], int numCommunity) {
+    if (numCommunity < 3) return 0.5;  // Pre-flop, assume average potential
+    
+    double potential = 0.0;
+    int improvements = 0;
+    
+    // Check for drawing possibilities
+    int suits[4] = {0};
+    int values[14] = {0};
+    
+    // Count player cards
+    for (int i = 0; i < 2; i++) {
+        suits[playerCards[i].suit]++;
+        values[playerCards[i].value]++;
+    }
+    
+    // Count community cards
+    for (int i = 0; i < numCommunity; i++) {
+        suits[communityCards[i].suit]++;
+        values[communityCards[i].value]++;
+    }
+    
+    // Check for flush draws
+    for (int i = 0; i < 4; i++) {
+        if (suits[i] == 4 && numCommunity < 5) {  // 4 to a flush with cards to come
+            potential += 0.35;  // ~35% chance to complete flush
+            improvements++;
+        }
+    }
+    
+    // Check for straight draws (simplified)
+    int consecutive = 0;
+    int maxConsecutive = 0;
+    for (int i = 1; i <= 13; i++) {
+        if (values[i] > 0) {
+            consecutive++;
+            if (consecutive > maxConsecutive) maxConsecutive = consecutive;
+        } else {
+            consecutive = 0;
+        }
+    }
+    
+    if (maxConsecutive >= 4 && numCommunity < 5) {  // Open-ended straight draw
+        potential += 0.32;  // ~32% chance
+        improvements++;
+    } else if (maxConsecutive == 3 && numCommunity < 5) {  // Gutshot
+        potential += 0.17;  // ~17% chance
+        improvements++;
+    }
+    
+    // Normalize potential
+    if (improvements > 0) {
+        potential = fmin(potential, 1.0);
+    }
+    
+    return potential;
+}
+
+// Calculate board texture (how coordinated/dangerous the board is)
+double calculateBoardTexture(Card communityCards[], int numCommunity) {
+    if (numCommunity < 3) return 0.5;  // Pre-flop
+    
+    double texture = 0.0;  // 0 = dry board, 1 = wet board
+    
+    int suits[4] = {0};
+    int values[14] = {0};
+    int pairs = 0;
+    
+    // Analyze community cards
+    for (int i = 0; i < numCommunity; i++) {
+        suits[communityCards[i].suit]++;
+        values[communityCards[i].value]++;
+    }
+    
+    // Check for flush possibilities
+    for (int i = 0; i < 4; i++) {
+        if (suits[i] >= 3) texture += 0.3;  // Flush possible
+        if (suits[i] >= 2) texture += 0.1;  // Flush draw possible
+    }
+    
+    // Check for pairs/trips
+    for (int i = 1; i <= 13; i++) {
+        if (values[i] >= 2) {
+            pairs++;
+            texture += 0.2;  // Paired board
+        }
+    }
+    
+    // Check for straight possibilities (simplified)
+    int consecutive = 0;
+    for (int i = 1; i <= 13; i++) {
+        if (values[i] > 0) {
+            consecutive++;
+        } else {
+            if (consecutive >= 3) texture += 0.2;  // Straight possible
+            consecutive = 0;
+        }
+    }
+    
+    return fmin(texture, 1.0);
 }
 
 void train(NeuralNetwork *nn, double **trainingInputs, double **trainingOutputs, int numSamples)
