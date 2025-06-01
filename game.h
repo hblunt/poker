@@ -19,5 +19,10 @@ bool allBetsMatched(Player players[], int numPlayers, int currentBet);
 void clearScreen();
 void pause();
 
+// Training log viewing functions
+void viewTrainingLogs();
+void showBasicTrainingLog();
+void showSelfPlayTrainingLog();
+
 #endif
 

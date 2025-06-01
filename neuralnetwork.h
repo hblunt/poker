@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 #include <stdbool.h>
 #include "scoringsystem.h"
 #include "player.h"
@@ -64,6 +65,20 @@ typedef struct {
     double activationFunction;
 } NeuralNetwork;
 
+// Training statistics structure
+typedef struct {
+    double *lossHistory;        // Loss for each epoch
+    double *accuracyHistory;    // Accuracy for each epoch
+    int *epochNumbers;          // Epoch numbers for plotting
+    int currentEpoch;           // Current epoch number
+    int maxEpochs;              // Total epochs planned
+    double bestLoss;            // Best loss achieved
+    int bestEpoch;              // Epoch where best loss occurred
+    double initialLoss;         // Loss at start of training
+    clock_t startTime;          // Training start time
+    FILE *logFile;              // File for logging training progress
+} TrainingStats;
+
 // Network creation and management (unchanged)
 NeuralNetwork* createNetwork(int inputSize, int hiddenSize, int outputSize);
 void freeNetwork(NeuralNetwork *nn);
@@ -95,5 +110,24 @@ int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards
 void saveNetwork(NeuralNetwork *nn, const char *filename);
 NeuralNetwork* loadNetwork(const char *filename);
 void printNetworkState(NeuralNetwork *nn);
+
+
+// Training monitoring function declarations
+TrainingStats* initializeTrainingStats(int maxEpochs);
+double calculateLoss(NeuralNetwork *nn, double **inputs, double **targets, int numSamples);
+double calculateAccuracy(NeuralNetwork *nn, double **inputs, double **targets, int numSamples);
+void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **inputs, 
+                        double **targets, int numSamples, double learningRate);
+void displayTrainingProgress(TrainingStats *stats, bool verbose);
+void displayTrainingSummary(TrainingStats *stats);
+void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **trainingOutputs, 
+                        int numSamples, int epochs);
+void saveTrainingCurves(TrainingStats *stats, const char *filename);
+void displayLossGraph(TrainingStats *stats);
+
+// Enhanced training functions
+void trainEnhancedBasicAIWithMonitoring();
+void enhancedSelfPlayTrainingWithMonitoring(int numGames, int numPlayers);
+void printRepeatedChar(char c, int count);
 
 #endif // NEURALNETWORK_H

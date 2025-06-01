@@ -11,72 +11,113 @@
 #include "aiplayer.h"
 #include "selftrain.h"
 
-int main(void)
-{
+int main(void) {
     int numPlayers;
     Player players[MAXPLAYERS];
     char choice;
 
     srand(time(NULL));
 
-    printf("--- GU Hold'em ---\n\n");
-    printf("1. Play against AI\n");
-    printf("2. Basic AI training\n");
-    printf("3. Advanced self-play training\n");
-    printf("4. Play without AI\n\n");
+    printf("============================================\n");
+    printf("=          GU HOLD'EM - ENHANCED AI        =\n");
+    printf("============================================\n");
+    printf("=                                          =\n");
+    printf("=  1. Play against AI                      =\n");
+    printf("=  2. Basic AI training (simple)           =\n");
+    printf("=  3. Enhanced AI training (monitored)     =\n");
+    printf("=  4. Self-play training (monitored)       =\n");
+    printf("=  5. Advanced self-play training          =\n");
+    printf("=  6. View training logs                   =\n");
+    printf("=  7. Play without AI                      =\n");
+    printf("=                                          =\n");
+    printf("============================================\n");
     printf("Choice: ");
     scanf(" %c", &choice);
     clearInputBuffer();
 
     switch(choice) {
         case '1':
-            // Initialize AI system
+            printf("\n[AI] Loading AI system...\n");
             initialiseAI();
             numPlayers = setupWithAI(players);
             break;
 
         case '2':
-            // Basic training
-            trainEnhancedBasicAI();
+            printf("\n[TRAINING] Starting basic AI training...\n");
+            trainBasicAI();
             pause();
             initialiseAI();
             numPlayers = setupWithAI(players);
             break;
 
         case '3':
-            // Advanced self-play training
-            enhancedSelfPlayTraining(500, 4);
+            printf("\n[ENHANCED] Starting enhanced AI training with monitoring...\n");
+            trainEnhancedBasicAIWithMonitoring();
             pause();
             initialiseAI();
             numPlayers = setupWithAI(players);
             break;
 
         case '4':
+            printf("\n[SELF-PLAY] Starting self-play training with monitoring...\n");
+            int games, aiPlayers;
+            printf("Number of training games (recommended: 500-2000): ");
+            scanf("%d", &games);
+            printf("Number of AI players (2-6): ");
+            scanf("%d", &aiPlayers);
+            clearInputBuffer();
+            
+            if (games < 10) games = 100;
+            if (aiPlayers < 2) aiPlayers = 2;
+            if (aiPlayers > 6) aiPlayers = 6;
+            
+            enhancedSelfPlayTrainingWithMonitoring(games, aiPlayers);
+            pause();
+            initialiseAI();
+            numPlayers = setupWithAI(players);
+            break;
+
+        case '5':
+            printf("\n[ADVANCED] Starting advanced self-play training...\n");
+            advancedSelfPlayTraining();
+            pause();
+            initialiseAI();
+            numPlayers = setupWithAI(players);
+            break;
+
+        case '6':
+            printf("\n[LOGS] Viewing training logs...\n");
+            viewTrainingLogs();
+            pause();
+            return main(); // Return to menu
+            break;
+
+        case '7':
+            printf("\n[HUMAN] Setting up human-only game...\n");
             numPlayers = setup(players);
             break;
 
         default:
+            printf("\n[ERROR] Invalid choice. Starting human-only game...\n");
             numPlayers = setup(players);
             break;
     }
 
-    printf("\nPlaying with %d players: ", numPlayers);
+    printf("\n[GAME] Playing with %d players: ", numPlayers);
 
-    for (int i = 0; i < numPlayers; i++)
-    {
+    for (int i = 0; i < numPlayers; i++) {
         printf("%s", players[i].name);
 
-        if(i < numPlayers - 2)
-        {
+        if(i < numPlayers - 2) {
             printf(", ");
         }
-        else if(i == numPlayers - 2)
-        {
+        else if(i == numPlayers - 2) {
             printf(" and ");
         }
     }
     printf("\n");
 
+    // Check if we have AI players
     bool hasAI = false;
     for (int i = 0; i < numPlayers; i++) {
         if (strncmp(players[i].name, "AI ", 3) == 0) {
@@ -85,17 +126,18 @@ int main(void)
         }
     }
 
+    // Play the game
     if (hasAI) {
+        printf("[AI] AI-enhanced game starting...\n");
         playHandAI(numPlayers, players);
     } else {
+        printf("[HUMAN] Human-only game starting...\n");
         playHand(numPlayers, players);
     }
 
     // Cleanup
-    for(int i = 0; i < numPlayers; i++)
-    {
-        if(players[i].hand)
-        {
+    for(int i = 0; i < numPlayers; i++) {
+        if(players[i].hand) {
             freeHand(players[i].hand, 1);
         }
     }
@@ -106,6 +148,176 @@ int main(void)
     }
 
     return 0;
+}
+
+// New function to view training logs
+void viewTrainingLogs() {
+    printf("[LOGS] TRAINING LOGS VIEWER\n");
+    printRepeatedChar('-', 50);
+    printf("\n");
+    
+    // Check which log files exist
+    FILE *file;
+    
+    printf("Available training logs:\n\n");
+    
+    // Check basic training log
+    file = fopen("training_log.csv", "r");
+    if (file) {
+        printf("[OK] training_log.csv - Basic/Enhanced AI training results\n");
+        fclose(file);
+        
+        // Show summary of basic training
+        showBasicTrainingLog();
+    } else {
+        printf("[MISSING] training_log.csv - No basic training log found\n");
+    }
+    
+    // Check self-play training log
+    file = fopen("selfplay_progress.csv", "r");
+    if (file) {
+        printf("[OK] selfplay_progress.csv - Self-play training progress\n");
+        fclose(file);
+        
+        // Show summary of self-play training
+        showSelfPlayTrainingLog();
+    } else {
+        printf("[MISSING] selfplay_progress.csv - No self-play training log found\n");
+    }
+    
+    printf("\n[TIP] You can open these .csv files in Excel or Google Sheets\n");
+    printf("      to create graphs of the training progress!\n");
+}
+
+// Show summary of basic training log
+void showBasicTrainingLog() {
+    FILE *file = fopen("training_log.csv", "r");
+    if (!file) return;
+    
+    printf("\n[SUMMARY] BASIC TRAINING SUMMARY:\n");
+    printRepeatedChar('-', 30);
+    printf("\n");
+    
+    char line[256];
+    double firstLoss = 0, lastLoss = 0, bestLoss = 1000;
+    double firstAcc = 0, lastAcc = 0, bestAcc = 0;
+    int epochs = 0;
+    double totalTime = 0;
+    
+    // Skip header
+    fgets(line, sizeof(line), file);
+    
+    // Read training data
+    while (fgets(line, sizeof(line), file)) {
+        int epoch;
+        double loss, accuracy, time, lr;
+        if (sscanf(line, "%d,%lf,%lf,%lf,%lf", &epoch, &loss, &accuracy, &time, &lr) == 5) {
+            if (epochs == 0) {
+                firstLoss = loss;
+                firstAcc = accuracy;
+            }
+            lastLoss = loss;
+            lastAcc = accuracy;
+            totalTime = time;
+            
+            if (loss < bestLoss) bestLoss = loss;
+            if (accuracy > bestAcc) bestAcc = accuracy;
+            
+            epochs++;
+        }
+    }
+    
+    fclose(file);
+    
+    if (epochs > 0) {
+        printf("Epochs completed: %d\n", epochs);
+        printf("Total training time: %.1f seconds\n", totalTime);
+        printf("Initial loss: %.6f -> Final loss: %.6f\n", firstLoss, lastLoss);
+        printf("Best loss achieved: %.6f\n", bestLoss);
+        printf("Initial accuracy: %.1f%% -> Final accuracy: %.1f%%\n", firstAcc * 100, lastAcc * 100);
+        printf("Best accuracy: %.1f%%\n", bestAcc * 100);
+        printf("Improvement: %.1f%% loss reduction\n", ((firstLoss - lastLoss) / firstLoss) * 100);
+        
+        if (lastLoss < firstLoss * 0.1) {
+            printf("Status: [EXCELLENT] EXCELLENT training results!\n");
+        } else if (lastLoss < firstLoss * 0.5) {
+            printf("Status: [GOOD] GOOD training progress\n");
+        } else {
+            printf("Status: [WARNING] LIMITED improvement - may need more training\n");
+        }
+    }
+}
+
+// Show summary of self-play training log
+void showSelfPlayTrainingLog() {
+    FILE *file = fopen("selfplay_progress.csv", "r");
+    if (!file) return;
+    
+    printf("\n[SUMMARY] SELF-PLAY TRAINING SUMMARY:\n");
+    printRepeatedChar('-', 35);
+    printf("\n");
+    
+    char line[512];
+    int totalGames = 0;
+    double finalWinRates[4] = {0};
+    int finalBufferSize = 0;
+    
+    // Skip header
+    fgets(line, sizeof(line), file);
+    
+    // Read to find the last entry
+    while (fgets(line, sizeof(line), file)) {
+        double wr0, wr1, wr2, wr3, avgCredits;
+        int bufferSize;
+        if (sscanf(line, "%d,%lf,%lf,%lf,%lf,%lf,%d", 
+                   &totalGames, &wr0, &wr1, &wr2, &wr3, &avgCredits, &bufferSize) >= 6) {
+            finalWinRates[0] = wr0;
+            finalWinRates[1] = wr1;
+            finalWinRates[2] = wr2;
+            finalWinRates[3] = wr3;
+            finalBufferSize = bufferSize;
+        }
+    }
+    
+    fclose(file);
+    
+    if (totalGames > 0) {
+        printf("Games completed: %d\n", totalGames);
+        printf("Experience samples: %d\n", finalBufferSize);
+        printf("Final win rates:\n");
+        
+        int bestAI = 0;
+        double bestWinRate = finalWinRates[0];
+        
+        for (int i = 0; i < 4; i++) {
+            printf("  AI_%d: %.1f%%", i, finalWinRates[i]);
+            if (finalWinRates[i] > bestWinRate) {
+                bestWinRate = finalWinRates[i];
+                bestAI = i;
+            }
+            if (i == bestAI) printf(" [BEST]");
+            printf("\n");
+        }
+        
+        // Calculate diversity
+        double maxDiff = 0;
+        for (int i = 0; i < 4; i++) {
+            for (int j = i + 1; j < 4; j++) {
+                double diff = fabs(finalWinRates[i] - finalWinRates[j]);
+                if (diff > maxDiff) maxDiff = diff;
+            }
+        }
+        
+        printf("Strategy diversity: %.1f%% (max win rate difference)\n", maxDiff);
+        
+        if (maxDiff < 10) {
+            printf("Status: [BALANCED] BALANCED strategies - good training!\n");
+        } else if (maxDiff < 25) {
+            printf("Status: [MODERATE] MODERATE variation - decent training\n");
+        } else {
+            printf("Status: [WARNING] HIGH variation - one AI may be dominating\n");
+        }
+    }
 }
 
 void clearScreen()

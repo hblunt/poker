@@ -86,4 +86,21 @@ void updateEnhancedRewards(ReplayBuffer *rb, int startIndex, GameRecord *record)
 // Weight manipulation for diversity
 void addNoiseToWeights(NeuralNetwork *nn, double noiseLevel);
 
+
+// Enhanced self-play functions with monitoring
+GameRecord playEnhancedSelfPlayGame(NeuralNetwork **networks, int numPlayers, ReplayBuffer *rb);
+int playEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **networks,
+                           ReplayBuffer *rb, GameRecord *record);
+bool enhancedSelfPlayPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
+                                    Hand* communityCards, int cardsRevealed, int startPosition, 
+                                    int *currentBetAmount, NeuralNetwork **networks,
+                                    ReplayBuffer *rb, int *handDecisions);
+int enhancedSelfPlayDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
+                           int pot, int currentBet, int numPlayers, int position, 
+                           ReplayBuffer *rb, int playerIndex);
+void updateEnhancedRewards(ReplayBuffer *rb, int startIndex, GameRecord *record);
+
+// Add these to main.c or create a new logs.h
+
+
 #endif // SELFTRAIN_H

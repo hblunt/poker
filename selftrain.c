@@ -190,7 +190,6 @@ void trainFromExperience(NeuralNetwork *nn, ReplayBuffer *rb, int batchSize) {
 
 // Generate basic training data with simple poker strategy
 void generateTrainingData(double **inputs, double **outputs, int numSamples) {
-    srand(time(NULL));
     
     for (int i = 0; i < numSamples; i++) {
         // Create varied game states
@@ -754,7 +753,6 @@ void advancedSelfPlayTraining() {
 
 // Enhanced training data generation
 void generateEnhancedTrainingData(double **inputs, double **outputs, int numSamples) {
-    srand(time(NULL));
     
     printf("Generating enhanced training data with %d samples...\n", numSamples);
     
