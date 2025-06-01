@@ -8,6 +8,10 @@
 static OpponentProfile opponentProfiles[MAXPLAYERS];
 static bool profilesInitialized = false;
 
+// ===================================================================
+// CORE NEURAL NETWORK FUNCTIONS
+// ===================================================================
+
 // Create a NN (memory allocation)
 NeuralNetwork* createNetwork(int inputSize, int hiddenSize, int outputSize)
 {
@@ -212,7 +216,11 @@ void updateWeights(NeuralNetwork *nn)
     }
 }
 
-// REPLACE your existing encodeGameState function with this enhanced version
+// ===================================================================
+// ENHANCED GAME STATE ENCODING AND DECISION MAKING
+// ===================================================================
+
+// Enhanced game state encoding function
 void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int currentBet, 
                            int numPlayers, int position, double *output) {
     memset(output, 0, INPUT_SIZE * sizeof(double));
@@ -343,6 +351,7 @@ void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int 
         output[21] = (double)highCard / 13.0;
     }
 }
+
 // Enhanced decision making function
 int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
                         int pot, int currentBet, int numPlayers, int position) {
@@ -387,6 +396,11 @@ int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards
     
     return bestAction;
 }
+
+// ===================================================================
+// OPPONENT MODELING FUNCTIONS
+// ===================================================================
+
 // Initialize opponent profiles at start of game
 void initializeOpponentProfiles(int numPlayers) {
     if (!profilesInitialized) {
@@ -543,29 +557,82 @@ double calculateBoardTexture(Card communityCards[], int numCommunity) {
     return fmin(texture, 1.0);
 }
 
+// ===================================================================
+// ENHANCED TRAINING DATA GENERATION
+// ===================================================================
 
-
-void train(NeuralNetwork *nn, double **trainingInputs, double **trainingOutputs, int numSamples) {
-    printf("\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    printf("STARTING NEURAL NETWORK TRAINING\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    printf("Network Architecture: %d → %d → %d\n", nn->inputSize, nn->hiddenSize, nn->outputSize);
-    printf("Training samples: %d\n", numSamples);
-    printf("Learning rate: %.4f\n", nn->learningRate);
-    printf("Target epochs: %d\n", TRAINING_EPOCHS);
-    printf("Activation function: %s\n", 
-           nn->activationFunction == ACTIVATION_SIGMOID ? "Sigmoid" : 
-           nn->activationFunction == ACTIVATION_RELU ? "ReLU" : "Tanh");
-    printRepeatedChar('=', 60);
-    printf("\n\n");
+// Enhanced training data generation
+void generateEnhancedTrainingData(double **inputs, double **outputs, int numSamples) {
     
-    // Use the enhanced training with monitoring
-    trainWithMonitoring(nn, trainingInputs, trainingOutputs, numSamples, TRAINING_EPOCHS);
+    printf("Generating enhanced training data with %d samples...\n", numSamples);
     
-    printf("\nTraining complete!\n");
+    for (int i = 0; i < numSamples; i++) {
+        // Create more realistic game states
+        double handStrength = (double)rand() / RAND_MAX;
+        double handPotential = (double)rand() / RAND_MAX;
+        double boardTexture = (double)rand() / RAND_MAX;
+        double potOdds = (double)rand() / RAND_MAX;
+        double position = (double)rand() / RAND_MAX;
+        double stackRatio = (double)rand() / RAND_MAX * 5.0;
+        
+        // Build enhanced input vector
+        inputs[i][0] = handStrength;
+        inputs[i][1] = handPotential;
+        inputs[i][2] = boardTexture;
+        inputs[i][3] = potOdds;
+        inputs[i][4] = stackRatio;
+        inputs[i][5] = position;
+        
+        // Fill remaining inputs
+        for (int j = 6; j < INPUT_SIZE; j++) {
+            inputs[i][j] = (double)rand() / RAND_MAX;
+        }
+        
+        // Enhanced strategy logic
+        double fold = 0.0, call = 0.0, raise = 0.0;
+        
+        double effectiveStrength = handStrength + (handPotential * 0.3);
+        
+        // Position adjustment
+        if (position > 0.7) effectiveStrength += 0.1;
+        
+        // Pot odds consideration
+        if (potOdds < 0.3 && effectiveStrength > 0.4) {
+            effectiveStrength += 0.1;
+        }
+        
+        // Board texture adjustment
+        if (boardTexture > 0.7 && effectiveStrength < 0.6) {
+            effectiveStrength -= 0.1;
+        }
+        
+        // Strategy based on effective strength
+        if (effectiveStrength < 0.2) {
+            fold = 0.8; call = 0.15; raise = 0.05;
+        } else if (effectiveStrength < 0.4) {
+            fold = 0.5; call = 0.4; raise = 0.1;
+        } else if (effectiveStrength < 0.6) {
+            fold = 0.2; call = 0.6; raise = 0.2;
+        } else if (effectiveStrength < 0.8) {
+            fold = 0.05; call = 0.3; raise = 0.65;
+        } else {
+            fold = 0.02; call = 0.18; raise = 0.8;
+        }
+        
+        // Add controlled randomness
+        double noise = ((double)rand() / RAND_MAX - 0.5) * 0.2;
+        fold += noise; call += noise; raise += noise;
+        
+        // Normalize to valid probabilities
+        double total = fold + call + raise;
+        if (total <= 0) total = 1.0;
+        
+        outputs[i][0] = fmax(0.01, fold / total);
+        outputs[i][1] = fmax(0.01, call / total);
+        outputs[i][2] = fmax(0.01, raise / total);
+    }
+    
+    printf("Enhanced training data generated successfully.\n");
 }
 
 // Enhanced basic AI training with monitoring
@@ -852,6 +919,10 @@ void enhancedSelfPlayTrainingWithMonitoring(int numGames, int numPlayers) {
     free(rb);
 }
 
+// ===================================================================
+// NETWORK FILE I/O AND UTILITY FUNCTIONS
+// ===================================================================
+
 void saveNetwork(NeuralNetwork *nn, const char *filename)
 {
     if (!nn) {
@@ -966,6 +1037,10 @@ void printNetworkState(NeuralNetwork *nn) {
            (nn->outputLayer[0].value > nn->outputLayer[2].value ? "FOLD" : "RAISE") :
            (nn->outputLayer[1].value > nn->outputLayer[2].value ? "CALL" : "RAISE"));
 }
+
+// ===================================================================
+// TRAINING MONITORING FUNCTIONS
+// ===================================================================
 
 // Add this helper function at the top of the file, after the includes
 void printRepeatedChar(char c, int count) {
@@ -1262,67 +1337,4 @@ void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **tr
     free(stats->accuracyHistory);
     free(stats->epochNumbers);
     free(stats);
-}
-
-// Save training curves to a plottable format
-void saveTrainingCurves(TrainingStats *stats, const char *filename) {
-    FILE *file = fopen(filename, "w");
-    if (!file) {
-        printf("Error: Could not create training curves file\n");
-        return;
-    }
-    
-    fprintf(file, "# Training Curves Data - Import into Excel/Python for plotting\n");
-    fprintf(file, "# Epoch,Loss,Accuracy\n");
-    
-    for (int i = 0; i < stats->currentEpoch; i++) {
-        fprintf(file, "%d,%.6f,%.4f\n", i, stats->lossHistory[i], stats->accuracyHistory[i]);
-    }
-    
-    fclose(file);
-    printf("Training curves saved to %s\n", filename);
-}
-
-// Quick visualization using ASCII art (for terminals without graphics)
-void displayLossGraph(TrainingStats *stats) {
-    if (!stats || stats->currentEpoch < 10) return;
-    
-    printf("\nLOSS CURVE (ASCII Visualization):\n");
-    printf("Loss\n");
-    printf("^\n");
-    
-    // Find min and max loss for scaling
-    double minLoss = stats->lossHistory[0];
-    double maxLoss = stats->lossHistory[0];
-    
-    for (int i = 1; i < stats->currentEpoch; i++) {
-        if (stats->lossHistory[i] < minLoss) minLoss = stats->lossHistory[i];
-        if (stats->lossHistory[i] > maxLoss) maxLoss = stats->lossHistory[i];
-    }
-    
-    // Draw graph (simplified)
-    int graphHeight = 10;
-    for (int row = graphHeight; row >= 0; row--) {
-        double threshold = minLoss + (maxLoss - minLoss) * row / graphHeight;
-        printf("|");
-        
-        // Sample every 10th epoch for display
-        for (int epoch = 0; epoch < stats->currentEpoch; epoch += stats->currentEpoch / 50) {
-            if (stats->lossHistory[epoch] >= threshold) {
-                printf("*");
-            } else {
-                printf(" ");
-            }
-        }
-        printf("\n");
-    }
-    
-    printf("+");
-    for (int i = 0; i < 50; i++) printf("-");
-    printf("> Epochs\n");
-    printf("0");
-    for (int i = 0; i < 45; i++) printf(" ");
-    printf("%d\n", stats->currentEpoch - 1);
-    
-    printf("Loss range: %.4f to %.4f\n", minLoss, maxLoss);
 }

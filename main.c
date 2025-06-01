@@ -23,12 +23,10 @@ int main(void) {
     printf("============================================\n");
     printf("=                                          =\n");
     printf("=  1. Play against AI                      =\n");
-    printf("=  2. Basic AI training (simple)           =\n");
-    printf("=  3. Enhanced AI training (monitored)     =\n");
-    printf("=  4. Self-play training (monitored)       =\n");
-    printf("=  5. Advanced self-play training          =\n");
-    printf("=  6. View training logs                   =\n");
-    printf("=  7. Play without AI                      =\n");
+    printf("=  2. Enhanced AI training (monitored)     =\n");
+    printf("=  3. Self-play training (monitored)       =\n");
+    printf("=  4. View training logs                   =\n");
+    printf("=  5. Play without AI                      =\n");
     printf("=                                          =\n");
     printf("============================================\n");
     printf("Choice: ");
@@ -43,14 +41,6 @@ int main(void) {
             break;
 
         case '2':
-            printf("\n[TRAINING] Starting basic AI training...\n");
-            trainBasicAI();
-            pause();
-            initialiseAI();
-            numPlayers = setupWithAI(players);
-            break;
-
-        case '3':
             printf("\n[ENHANCED] Starting enhanced AI training with monitoring...\n");
             trainEnhancedBasicAIWithMonitoring();
             pause();
@@ -58,7 +48,7 @@ int main(void) {
             numPlayers = setupWithAI(players);
             break;
 
-        case '4':
+        case '3':
             printf("\n[SELF-PLAY] Starting self-play training with monitoring...\n");
             int games, aiPlayers;
             printf("Number of training games (recommended: 500-2000): ");
@@ -77,22 +67,14 @@ int main(void) {
             numPlayers = setupWithAI(players);
             break;
 
-        case '5':
-            printf("\n[ADVANCED] Starting advanced self-play training...\n");
-            advancedSelfPlayTraining();
-            pause();
-            initialiseAI();
-            numPlayers = setupWithAI(players);
-            break;
-
-        case '6':
+        case '4':
             printf("\n[LOGS] Viewing training logs...\n");
             viewTrainingLogs();
             pause();
             return main(); // Return to menu
             break;
 
-        case '7':
+        case '5':
             printf("\n[HUMAN] Setting up human-only game...\n");
             numPlayers = setup(players);
             break;
@@ -150,7 +132,7 @@ int main(void) {
     return 0;
 }
 
-// New function to view training logs
+// Training log viewing functions
 void viewTrainingLogs() {
     printf("[LOGS] TRAINING LOGS VIEWER\n");
     printRepeatedChar('-', 50);
@@ -164,13 +146,13 @@ void viewTrainingLogs() {
     // Check basic training log
     file = fopen("training_log.csv", "r");
     if (file) {
-        printf("[OK] training_log.csv - Basic/Enhanced AI training results\n");
+        printf("[OK] training_log.csv - Enhanced AI training results\n");
         fclose(file);
         
         // Show summary of basic training
         showBasicTrainingLog();
     } else {
-        printf("[MISSING] training_log.csv - No basic training log found\n");
+        printf("[MISSING] training_log.csv - No enhanced training log found\n");
     }
     
     // Check self-play training log
@@ -189,13 +171,13 @@ void viewTrainingLogs() {
     printf("      to create graphs of the training progress!\n");
 }
 
-// Show summary of basic training log
+// Show summary of enhanced training log
 void showBasicTrainingLog() {
     FILE *file = fopen("training_log.csv", "r");
     if (!file) return;
     
-    printf("\n[SUMMARY] BASIC TRAINING SUMMARY:\n");
-    printRepeatedChar('-', 30);
+    printf("\n[SUMMARY] ENHANCED TRAINING SUMMARY:\n");
+    printRepeatedChar('-', 35);
     printf("\n");
     
     char line[256];

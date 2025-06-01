@@ -1,11 +1,14 @@
-// Updated selftrain.h - replace your existing selftrain.h with this
 #ifndef SELFTRAIN_H
 #define SELFTRAIN_H
 
 #include "neuralnetwork.h"
 #include "player.h"
 
-// Experience structure for replay buffer (unchanged)
+// ===================================================================
+// CORE DATA STRUCTURES
+// ===================================================================
+
+// Experience structure for replay buffer
 typedef struct {
     double gameState[INPUT_SIZE];
     int action;
@@ -15,7 +18,7 @@ typedef struct {
     int gameOutcome;
 } Experience;
 
-// Replay buffer for storing training experiences (unchanged)
+// Replay buffer for storing training experiences
 typedef struct {
     Experience *buffer;
     int capacity;
@@ -23,7 +26,7 @@ typedef struct {
     int writeIndex;
 } ReplayBuffer;
 
-// Game record for tracking training progress (unchanged)
+// Game record for tracking training progress
 typedef struct {
     int numPlayers;
     int winner;
@@ -33,74 +36,41 @@ typedef struct {
     int decisionCount[MAXPLAYERS];
 } GameRecord;
 
-// === ORIGINAL TRAINING FUNCTIONS ===
-// Basic training functions (keep your existing ones)
-void trainBasicAI();
-void selfPlayTraining(int numGames, int numPlayers);
-void advancedSelfPlayTraining();
+// ===================================================================
+// CORE UTILITY FUNCTIONS
+// ===================================================================
 
-// Original self-play functions
-void generateTrainingData(double **inputs, double **outputs, int numSamples);
-int playSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **networks, ReplayBuffer *rb, GameRecord *record);
-void updateRewards(ReplayBuffer *rb, int startIndex, GameRecord *record);
-void trainFromExperience(NeuralNetwork *nn, ReplayBuffer *rb, int batchSize);
-int determineWinner(Player players[], int numPlayers, Hand *communityCards);
-
-// Original replay buffer functions
+// Replay buffer management
 ReplayBuffer* createReplayBuffer(int capacity);
-void addExperience(ReplayBuffer *rb, double *gameState, int action, double reward, int playerIndex, int handOutcome, int gameOutcome);
+void addExperience(ReplayBuffer *rb, double *gameState, int action, double reward, 
+                  int playerIndex, int handOutcome, int gameOutcome);
 
-// Original self-play decision function
-int selfPlayDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, int pot, int currentBet, int numPlayers, int position, ReplayBuffer *rb, int playerIndex);
-bool selfPlayPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,Hand* communityCards, int cardsRevealed, int startPosition, int *currentBetAmount, NeuralNetwork **networks, ReplayBuffer *rb, int *handDecisions);
-GameRecord playSelfPlayGame(NeuralNetwork **networks, int numPlayers, ReplayBuffer *rb);
+// Network and training utilities
+void addNoiseToWeights(NeuralNetwork *nn, double noiseLevel);
+int determineWinner(Player players[], int numPlayers, Hand *communityCards);
+void trainFromExperience(NeuralNetwork *nn, ReplayBuffer *rb, int batchSize);
 
-// === NEW ENHANCED TRAINING FUNCTIONS ===
-// Enhanced basic training with better strategy and monitoring
-void trainEnhancedBasicAI();
-void trainEnhancedBasicAIWithMonitoring();
-void generateEnhancedTrainingData(double **inputs, double **outputs, int numSamples);
+// ===================================================================
+// ENHANCED SELF-PLAY TRAINING FUNCTIONS
+// ===================================================================
 
-// Enhanced self-play training with monitoring
-void enhancedSelfPlayTraining(int numGames, int numPlayers);
-void enhancedSelfPlayTrainingWithMonitoring(int numGames, int numPlayers);
+// Enhanced self-play decision making
+int enhancedSelfPlayDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
+                           int pot, int currentBet, int numPlayers, int position, 
+                           ReplayBuffer *rb, int playerIndex);
 
-// Enhanced self-play game functions
-GameRecord playEnhancedSelfPlayGame(NeuralNetwork **networks, int numPlayers, ReplayBuffer *rb);
-int playEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **networks, ReplayBuffer *rb, GameRecord *record);
-
-// Enhanced prediction round with better opponent modeling
+// Enhanced self-play prediction round
 bool enhancedSelfPlayPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
                                     Hand* communityCards, int cardsRevealed, int startPosition, 
                                     int *currentBetAmount, NeuralNetwork **networks,
                                     ReplayBuffer *rb, int *handDecisions);
 
-// Enhanced decision making with better exploration
-int enhancedSelfPlayDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
-                           int pot, int currentBet, int numPlayers, int position, 
-                           ReplayBuffer *rb, int playerIndex);
+// Enhanced self-play game management
+int playEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **networks,
+                           ReplayBuffer *rb, GameRecord *record);
+GameRecord playEnhancedSelfPlayGame(NeuralNetwork **networks, int numPlayers, ReplayBuffer *rb);
 
 // Enhanced reward system
 void updateEnhancedRewards(ReplayBuffer *rb, int startIndex, GameRecord *record);
-
-// Weight manipulation for diversity
-void addNoiseToWeights(NeuralNetwork *nn, double noiseLevel);
-
-
-// Enhanced self-play functions with monitoring
-GameRecord playEnhancedSelfPlayGame(NeuralNetwork **networks, int numPlayers, ReplayBuffer *rb);
-int playEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **networks,
-                           ReplayBuffer *rb, GameRecord *record);
-bool enhancedSelfPlayPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
-                                    Hand* communityCards, int cardsRevealed, int startPosition, 
-                                    int *currentBetAmount, NeuralNetwork **networks,
-                                    ReplayBuffer *rb, int *handDecisions);
-int enhancedSelfPlayDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
-                           int pot, int currentBet, int numPlayers, int position, 
-                           ReplayBuffer *rb, int playerIndex);
-void updateEnhancedRewards(ReplayBuffer *rb, int startIndex, GameRecord *record);
-
-// Add these to main.c or create a new logs.h
-
 
 #endif // SELFTRAIN_H

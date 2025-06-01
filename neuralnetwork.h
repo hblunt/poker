@@ -9,20 +9,24 @@
 #include "scoringsystem.h"
 #include "player.h"
 
-// UPDATED: Enhanced input size for better decision making
-#define INPUT_SIZE 22           // Increased from 15
-#define HIDDEN_SIZE 30          // Increased from 20 for more complexity
-#define OUTPUT_SIZE 3           // Call, raise, fold (unchanged)
+// Enhanced neural network configuration
+#define INPUT_SIZE 22           // Enhanced feature set (22 features)
+#define HIDDEN_SIZE 30          // Optimal hidden layer size
+#define OUTPUT_SIZE 3           // Fold, Call, Raise
 
-#define LEARNING_RATE 0.05      // Reduced for more stable learning
-#define TRAINING_EPOCHS 1000
+#define LEARNING_RATE 0.05      // Conservative learning rate
+#define TRAINING_EPOCHS 1000    // Standard training duration
 
-// Choices for activation functions (unchanged)
+// Activation function types
 #define ACTIVATION_RELU 0
 #define ACTIVATION_SIGMOID 1
 #define ACTIVATION_TANH 2
 
-// NEW: Opponent tracking structure
+// ===================================================================
+// CORE DATA STRUCTURES
+// ===================================================================
+
+// Opponent tracking structure for enhanced decision making
 typedef struct {
     double aggressionLevel;      // 0.0 (passive) to 1.0 (aggressive)
     double tightness;           // 0.0 (loose) to 1.0 (tight)
@@ -36,15 +40,15 @@ typedef struct {
     int voluntaryPuts;          // Hands where they voluntarily put money in pot
 } OpponentProfile;
 
-// Neuron structure (unchanged)
+// Neuron structure
 typedef struct {
     double value;
     double gradient;
 } Neuron;
 
-// Neural network structure (unchanged)
+// Neural network structure
 typedef struct {
-    // NN architecture
+    // Network architecture
     int inputSize;
     int hiddenSize;
     int outputSize;
@@ -60,12 +64,12 @@ typedef struct {
     double *biasHidden;
     double *biasOutput;
 
-    // Training params
+    // Training parameters
     double learningRate;
     double activationFunction;
 } NeuralNetwork;
 
-// Training statistics structure
+// Training statistics structure for monitoring
 typedef struct {
     double *lossHistory;        // Loss for each epoch
     double *accuracyHistory;    // Accuracy for each epoch
@@ -79,55 +83,80 @@ typedef struct {
     FILE *logFile;              // File for logging training progress
 } TrainingStats;
 
-// Network creation and management (unchanged)
+// ===================================================================
+// CORE NEURAL NETWORK FUNCTIONS
+// ===================================================================
+
+// Network creation and management
 NeuralNetwork* createNetwork(int inputSize, int hiddenSize, int outputSize);
 void freeNetwork(NeuralNetwork *nn);
 void initialiseWeights(NeuralNetwork *nn);
 
-// Forward propagation (unchanged)
+// Forward propagation and activation functions
 void forwardpropagate(NeuralNetwork *nn, double *input);
 double activate(double x, int activationType);
 double activateDerivative(double x, int activationType);
 
-// Training functions (unchanged)
-void train(NeuralNetwork *nn, double **trainingInputs, double **trainingOutputs, int numSamples);
+// Training functions
 void backpropagate(NeuralNetwork *nn, double *targetOutput);
 void updateWeights(NeuralNetwork *nn);
 
-// NEW: Enhanced game integration
-void initializeOpponentProfiles(int numPlayers);
-void updateOpponentProfile(int playerIndex, int action, bool voluntaryAction, int betAmount, int potSize);
-void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int currentBet, 
-                           int numPlayers, int position, double *output);
-double calculateHandPotential(Card playerCards[], Card communityCards[], int numCommunity);
-double calculateBoardTexture(Card communityCards[], int numCommunity);
-
-// UPDATED: Enhanced decision making
-int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
-                        int pot, int currentBet, int numPlayers, int position);
-
-// Utility functions (unchanged)
+// Network I/O
 void saveNetwork(NeuralNetwork *nn, const char *filename);
 NeuralNetwork* loadNetwork(const char *filename);
 void printNetworkState(NeuralNetwork *nn);
 
+// ===================================================================
+// ENHANCED GAME INTEGRATION FUNCTIONS
+// ===================================================================
 
-// Training monitoring function declarations
+// Opponent modeling
+void initializeOpponentProfiles(int numPlayers);
+void updateOpponentProfile(int playerIndex, int action, bool voluntaryAction, int betAmount, int potSize);
+
+// Enhanced game state encoding
+void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int currentBet, 
+                           int numPlayers, int position, double *output);
+
+// Poker-specific analysis functions
+double calculateHandPotential(Card playerCards[], Card communityCards[], int numCommunity);
+double calculateBoardTexture(Card communityCards[], int numCommunity);
+
+// Enhanced decision making
+int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
+                        int pot, int currentBet, int numPlayers, int position);
+
+// ===================================================================
+// ENHANCED TRAINING FUNCTIONS
+// ===================================================================
+
+// Enhanced training data generation
+void generateEnhancedTrainingData(double **inputs, double **outputs, int numSamples);
+
+// Main training functions (the only two methods we keep)
+void trainEnhancedBasicAIWithMonitoring();
+void enhancedSelfPlayTrainingWithMonitoring(int numGames, int numPlayers);
+
+// ===================================================================
+// TRAINING MONITORING FUNCTIONS
+// ===================================================================
+
+// Training statistics management
 TrainingStats* initializeTrainingStats(int maxEpochs);
 double calculateLoss(NeuralNetwork *nn, double **inputs, double **targets, int numSamples);
 double calculateAccuracy(NeuralNetwork *nn, double **inputs, double **targets, int numSamples);
 void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **inputs, 
                         double **targets, int numSamples, double learningRate);
+
+// Training progress display
 void displayTrainingProgress(TrainingStats *stats, bool verbose);
 void displayTrainingSummary(TrainingStats *stats);
+
+// Core monitored training function
 void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **trainingOutputs, 
                         int numSamples, int epochs);
-void saveTrainingCurves(TrainingStats *stats, const char *filename);
-void displayLossGraph(TrainingStats *stats);
 
-// Enhanced training functions
-void trainEnhancedBasicAIWithMonitoring();
-void enhancedSelfPlayTrainingWithMonitoring(int numGames, int numPlayers);
+// Utility functions
 void printRepeatedChar(char c, int count);
 
 #endif // NEURALNETWORK_H

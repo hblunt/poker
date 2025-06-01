@@ -9,16 +9,29 @@ NeuralNetwork *aiNetwork = NULL;
 // Initialize AI with enhanced network
 void initialiseAI() {
     // Try to load enhanced network first
-    aiNetwork = loadNetwork("poker_ai_enhanced.dat");
+    printf("Which network would you like to use?\n\n");
+    printf("1. Self-play trained AI\n");
+    printf("2. Basic AI\n\n");
+    int choice;
+    printf("Choice: ");
+    scanf(" %d", &choice);
+    clearInputBuffer();
     
-    if (!aiNetwork) {
-        // Fall back to self-play network
-        aiNetwork = loadNetwork("poker_ai_selfplay.dat");
-    }
-    
-    if (!aiNetwork) {
-        // Fall back to basic network
-        aiNetwork = loadNetwork("poker_ai.dat");
+    switch (choice) {
+        case 1:
+            printf("Loading self-play trained AI...\n");
+            aiNetwork = loadNetwork("poker_ai_enhanced_monitored.dat");
+            printf("Self-play AI initialised successfully.\n");
+            break;
+        case 2:
+            printf("Loading basic AI...\n");
+            aiNetwork = loadNetwork("poker_ai.dat");
+            printf("Basic AI initialised successfully.\n");
+            break;
+        default:
+            printf("Invalid choice. Defaulting to self-play trained AI.\n");
+            aiNetwork = loadNetwork("poker_ai_enhanced_monitored.dat");
+            break;
     }
     
     if (!aiNetwork) {
