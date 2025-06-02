@@ -10,7 +10,7 @@
 #include "player.h"
 
 // Enhanced neural network configuration
-#define INPUT_SIZE 22           // Enhanced feature set (22 features)
+#define INPUT_SIZE 20           // Enhanced feature set (22 features)
 #define HIDDEN_SIZE 30          // Optimal hidden layer size
 #define OUTPUT_SIZE 3           // Fold, Call, Raise
 
@@ -38,6 +38,9 @@ typedef struct {
     int foldCount;              // Number of folds made
     int handsPlayed;            // Total hands they've played
     int voluntaryPuts;          // Hands where they voluntarily put money in pot
+    double lastAggressiveAmount; // Most recent raise/bet amount this round
+    int roundNumber;            // Which round this aggression occurred
+    bool aggressiveActionThisRound; // Has there been a raise/bet this round?
 } OpponentProfile;
 
 // Neuron structure
@@ -72,7 +75,6 @@ typedef struct {
 // Training statistics structure for monitoring
 typedef struct {
     double *lossHistory;        // Loss for each epoch
-    double *accuracyHistory;    // Accuracy for each epoch
     int *epochNumbers;          // Epoch numbers for plotting
     int currentEpoch;           // Current epoch number
     int maxEpochs;              // Total epochs planned
@@ -81,6 +83,9 @@ typedef struct {
     double initialLoss;         // Loss at start of training
     clock_t startTime;          // Training start time
     FILE *logFile;              // File for logging training progress
+    double recentLossAverage;   // Average loss over last 50 epochs
+    bool overfittingDetected;   // Flag for overfitting
+    int stagnationCount;        // Epochs without improvement
 } TrainingStats;
 
 // ===================================================================
@@ -121,21 +126,24 @@ void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int 
 // Poker-specific analysis functions
 double calculateHandPotential(Card playerCards[], Card communityCards[], int numCommunity);
 double calculateBoardTexture(Card communityCards[], int numCommunity);
+void resetRoundAggression();
+void analyzeNetworkConfidence(NeuralNetwork *nn, double **inputs, int numSamples);
 
 // Enhanced decision making
 int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
                         int pot, int currentBet, int numPlayers, int position);
 
 // ===================================================================
-// ENHANCED TRAINING FUNCTIONS
+// NEW TWO-PHASE TRAINING SYSTEM
 // ===================================================================
 
-// Enhanced training data generation
-void generateEnhancedTrainingData(double **inputs, double **outputs, int numSamples);
+// Two-phase training functions
+void trainTwoPhaseAI(int numGames, int numPlayers);
+NeuralNetwork* trainMinimalBootstrap();
+void pureReinforcementLearning(int numGames, int numPlayers);
 
-// Main training functions (the only two methods we keep)
-void trainEnhancedBasicAIWithMonitoring();
-void enhancedSelfPlayTrainingWithMonitoring(int numGames, int numPlayers);
+// Bootstrap data generation
+void generateMinimalBootstrap(double **inputs, double **outputs, int numSamples);
 
 // ===================================================================
 // TRAINING MONITORING FUNCTIONS
@@ -150,7 +158,7 @@ void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **input
 
 // Training progress display
 void displayTrainingProgress(TrainingStats *stats, bool verbose);
-void displayTrainingSummary(TrainingStats *stats);
+void displayTrainingSummary(TrainingStats *stats, NeuralNetwork *nn, double **inputs, int numSamples);
 
 // Core monitored training function
 void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **trainingOutputs, 
@@ -158,5 +166,14 @@ void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **tr
 
 // Utility functions
 void printRepeatedChar(char c, int count);
+
+// ===================================================================
+// LEGACY FUNCTIONS (DEPRECATED - kept for compatibility)
+// ===================================================================
+
+// Old training functions - will be removed in future versions
+void trainEnhancedBasicAIWithMonitoring();  // DEPRECATED: Use trainTwoPhaseAI instead
+void enhancedSelfPlayTrainingWithMonitoring(int numGames, int numPlayers);  // DEPRECATED
+void generateEnhancedTrainingData(double **inputs, double **outputs, int numSamples);  // DEPRECATED
 
 #endif // NEURALNETWORK_H

@@ -11,6 +11,7 @@
 #include "aiplayer.h"
 #include "selftrain.h"
 
+
 int main(void) {
     int numPlayers;
     Player players[MAXPLAYERS];
@@ -19,14 +20,12 @@ int main(void) {
     srand(time(NULL));
 
     printf("============================================\n");
-    printf("=          GU HOLD'EM - ENHANCED AI        =\n");
+    printf("=          GU HOLD'EM - EVOLVED AI         =\n");
     printf("============================================\n");
     printf("=                                          =\n");
     printf("=  1. Play against AI                      =\n");
-    printf("=  2. Enhanced AI training (monitored)     =\n");
-    printf("=  3. Self-play training (monitored)       =\n");
-    printf("=  4. View training logs                   =\n");
-    printf("=  5. Play without AI                      =\n");
+    printf("=  2. Train AI (Two-Phase Learning)        =\n");
+    printf("=  3. Play without AI                      =\n");
     printf("=                                          =\n");
     printf("============================================\n");
     printf("Choice: ");
@@ -41,40 +40,39 @@ int main(void) {
             break;
 
         case '2':
-            printf("\n[ENHANCED] Starting enhanced AI training with monitoring...\n");
-            trainEnhancedBasicAIWithMonitoring();
-            pause();
-            initialiseAI();
-            numPlayers = setupWithAI(players);
-            break;
-
-        case '3':
-            printf("\n[SELF-PLAY] Starting self-play training with monitoring...\n");
+            printf("\n[TWO-PHASE] Starting two-phase AI training...\n");
+            printf("Phase 1: Minimal bootstrap (basic rules)\n");
+            printf("Phase 2: Pure self-play learning (strategy discovery)\n\n");
+            
             int games, aiPlayers;
-            printf("Number of training games (recommended: 500-2000): ");
+            printf("Number of self-play games (recommended: 1000-5000): ");
             scanf("%d", &games);
-            printf("Number of AI players (2-6): ");
+            printf("Number of AI players for self-play (2-6): ");
             scanf("%d", &aiPlayers);
             clearInputBuffer();
             
-            if (games < 10) games = 100;
-            if (aiPlayers < 2) aiPlayers = 2;
+            if (games < 50) games = 1000;
+            if (aiPlayers < 2) aiPlayers = 4;
             if (aiPlayers > 6) aiPlayers = 6;
             
-            enhancedSelfPlayTrainingWithMonitoring(games, aiPlayers);
-            pause();
-            initialiseAI();
-            numPlayers = setupWithAI(players);
+            printf("Starting two-phase training: %d games with %d AIs\n", games, aiPlayers);
+            trainTwoPhaseAI(games, aiPlayers);
+            
+            // Automatically show training results and ask if user wants to play
+            printf("\nTraining complete! Would you like to play against the evolved AI? (Y/N): ");
+            char playChoice;
+            scanf(" %c", &playChoice);
+            clearInputBuffer();
+            
+            if (playChoice == 'Y' || playChoice == 'y') {
+                initialiseAI();
+                numPlayers = setupWithAI(players);
+            } else {
+                return 0;  // Exit program
+            }
             break;
 
-        case '4':
-            printf("\n[LOGS] Viewing training logs...\n");
-            viewTrainingLogs();
-            pause();
-            return main(); // Return to menu
-            break;
-
-        case '5':
+        case '3':
             printf("\n[HUMAN] Setting up human-only game...\n");
             numPlayers = setup(players);
             break;
@@ -130,176 +128,6 @@ int main(void) {
     }
 
     return 0;
-}
-
-// Training log viewing functions
-void viewTrainingLogs() {
-    printf("[LOGS] TRAINING LOGS VIEWER\n");
-    printRepeatedChar('-', 50);
-    printf("\n");
-    
-    // Check which log files exist
-    FILE *file;
-    
-    printf("Available training logs:\n\n");
-    
-    // Check basic training log
-    file = fopen("training_log.csv", "r");
-    if (file) {
-        printf("[OK] training_log.csv - Enhanced AI training results\n");
-        fclose(file);
-        
-        // Show summary of basic training
-        showBasicTrainingLog();
-    } else {
-        printf("[MISSING] training_log.csv - No enhanced training log found\n");
-    }
-    
-    // Check self-play training log
-    file = fopen("selfplay_progress.csv", "r");
-    if (file) {
-        printf("[OK] selfplay_progress.csv - Self-play training progress\n");
-        fclose(file);
-        
-        // Show summary of self-play training
-        showSelfPlayTrainingLog();
-    } else {
-        printf("[MISSING] selfplay_progress.csv - No self-play training log found\n");
-    }
-    
-    printf("\n[TIP] You can open these .csv files in Excel or Google Sheets\n");
-    printf("      to create graphs of the training progress!\n");
-}
-
-// Show summary of enhanced training log
-void showBasicTrainingLog() {
-    FILE *file = fopen("training_log.csv", "r");
-    if (!file) return;
-    
-    printf("\n[SUMMARY] ENHANCED TRAINING SUMMARY:\n");
-    printRepeatedChar('-', 35);
-    printf("\n");
-    
-    char line[256];
-    double firstLoss = 0, lastLoss = 0, bestLoss = 1000;
-    double firstAcc = 0, lastAcc = 0, bestAcc = 0;
-    int epochs = 0;
-    double totalTime = 0;
-    
-    // Skip header
-    fgets(line, sizeof(line), file);
-    
-    // Read training data
-    while (fgets(line, sizeof(line), file)) {
-        int epoch;
-        double loss, accuracy, time, lr;
-        if (sscanf(line, "%d,%lf,%lf,%lf,%lf", &epoch, &loss, &accuracy, &time, &lr) == 5) {
-            if (epochs == 0) {
-                firstLoss = loss;
-                firstAcc = accuracy;
-            }
-            lastLoss = loss;
-            lastAcc = accuracy;
-            totalTime = time;
-            
-            if (loss < bestLoss) bestLoss = loss;
-            if (accuracy > bestAcc) bestAcc = accuracy;
-            
-            epochs++;
-        }
-    }
-    
-    fclose(file);
-    
-    if (epochs > 0) {
-        printf("Epochs completed: %d\n", epochs);
-        printf("Total training time: %.1f seconds\n", totalTime);
-        printf("Initial loss: %.6f -> Final loss: %.6f\n", firstLoss, lastLoss);
-        printf("Best loss achieved: %.6f\n", bestLoss);
-        printf("Initial accuracy: %.1f%% -> Final accuracy: %.1f%%\n", firstAcc * 100, lastAcc * 100);
-        printf("Best accuracy: %.1f%%\n", bestAcc * 100);
-        printf("Improvement: %.1f%% loss reduction\n", ((firstLoss - lastLoss) / firstLoss) * 100);
-        
-        if (lastLoss < firstLoss * 0.1) {
-            printf("Status: [EXCELLENT] EXCELLENT training results!\n");
-        } else if (lastLoss < firstLoss * 0.5) {
-            printf("Status: [GOOD] GOOD training progress\n");
-        } else {
-            printf("Status: [WARNING] LIMITED improvement - may need more training\n");
-        }
-    }
-}
-
-// Show summary of self-play training log
-void showSelfPlayTrainingLog() {
-    FILE *file = fopen("selfplay_progress.csv", "r");
-    if (!file) return;
-    
-    printf("\n[SUMMARY] SELF-PLAY TRAINING SUMMARY:\n");
-    printRepeatedChar('-', 35);
-    printf("\n");
-    
-    char line[512];
-    int totalGames = 0;
-    double finalWinRates[4] = {0};
-    int finalBufferSize = 0;
-    
-    // Skip header
-    fgets(line, sizeof(line), file);
-    
-    // Read to find the last entry
-    while (fgets(line, sizeof(line), file)) {
-        double wr0, wr1, wr2, wr3, avgCredits;
-        int bufferSize;
-        if (sscanf(line, "%d,%lf,%lf,%lf,%lf,%lf,%d", 
-                   &totalGames, &wr0, &wr1, &wr2, &wr3, &avgCredits, &bufferSize) >= 6) {
-            finalWinRates[0] = wr0;
-            finalWinRates[1] = wr1;
-            finalWinRates[2] = wr2;
-            finalWinRates[3] = wr3;
-            finalBufferSize = bufferSize;
-        }
-    }
-    
-    fclose(file);
-    
-    if (totalGames > 0) {
-        printf("Games completed: %d\n", totalGames);
-        printf("Experience samples: %d\n", finalBufferSize);
-        printf("Final win rates:\n");
-        
-        int bestAI = 0;
-        double bestWinRate = finalWinRates[0];
-        
-        for (int i = 0; i < 4; i++) {
-            printf("  AI_%d: %.1f%%", i, finalWinRates[i]);
-            if (finalWinRates[i] > bestWinRate) {
-                bestWinRate = finalWinRates[i];
-                bestAI = i;
-            }
-            if (i == bestAI) printf(" [BEST]");
-            printf("\n");
-        }
-        
-        // Calculate diversity
-        double maxDiff = 0;
-        for (int i = 0; i < 4; i++) {
-            for (int j = i + 1; j < 4; j++) {
-                double diff = fabs(finalWinRates[i] - finalWinRates[j]);
-                if (diff > maxDiff) maxDiff = diff;
-            }
-        }
-        
-        printf("Strategy diversity: %.1f%% (max win rate difference)\n", maxDiff);
-        
-        if (maxDiff < 10) {
-            printf("Status: [BALANCED] BALANCED strategies - good training!\n");
-        } else if (maxDiff < 25) {
-            printf("Status: [MODERATE] MODERATE variation - decent training\n");
-        } else {
-            printf("Status: [WARNING] HIGH variation - one AI may be dominating\n");
-        }
-    }
 }
 
 void clearScreen()
@@ -385,6 +213,7 @@ int playHandAI(int numPlayers, Player players[])
     pause();
 
     // Pre-flop
+    resetRoundAggression();
     printf("--- Pre-flop Predictions ---\n");
     int currentBetAmount = BIG_BLIND;
     int startPosition = findNextActivePlayer(players, numPlayers, bigBlindPos, 1);
@@ -413,6 +242,7 @@ int playHandAI(int numPlayers, Player players[])
     printf("---\n");
     pause();
 
+    resetRoundAggression();
     printf("\n--- Flop Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
     gameOver = aiPredictionRound(players, numPlayers, &pot, 2, communityCards, cardsRevealed, startPosition, &currentBetAmount);
@@ -437,6 +267,7 @@ int playHandAI(int numPlayers, Player players[])
     printf("%s ---\n", cardStr);
     pause();
 
+    resetRoundAggression();
     printf("\n--- Turn Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
     gameOver = aiPredictionRound(players, numPlayers, &pot, 3, communityCards, cardsRevealed, startPosition, &currentBetAmount);
@@ -460,6 +291,7 @@ int playHandAI(int numPlayers, Player players[])
     printf("%s ---\n", cardStr);
     pause();
 
+    resetRoundAggression();
     printf("\n--- River Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
     gameOver =aiPredictionRound(players, numPlayers, &pot, 4, communityCards, cardsRevealed, startPosition, &currentBetAmount);
@@ -580,6 +412,7 @@ int playHand(int numPlayers, Player players[]) {
     printf("\nStarting hand with %d active players\n", activePlayers);
     pause();
 
+    resetRoundAggression();
     printf("\n--- Pre-flop Predictions ---\n");
     int currentBetAmount = BIG_BLIND;
     int startPosition = findNextActivePlayer(players, numPlayers, bigBlindPos, 1); // Start with player after big blind
@@ -607,6 +440,7 @@ int playHand(int numPlayers, Player players[]) {
     printf("---\n");
     pause();
 
+    resetRoundAggression();
     printf("\n--- Flop Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
     gameOver = predictionRound(players, numPlayers, &pot, 2, communityCards, cardsRevealed, startPosition, &currentBetAmount);
@@ -631,6 +465,7 @@ int playHand(int numPlayers, Player players[]) {
     printf("%s ---\n", cardStr);
     pause();
 
+    resetRoundAggression();
     printf("\n--- Turn Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
     gameOver = predictionRound(players, numPlayers, &pot, 3, communityCards, cardsRevealed, startPosition, &currentBetAmount);
@@ -654,6 +489,7 @@ int playHand(int numPlayers, Player players[]) {
     printf("%s ---\n", cardStr);
     pause();
 
+    resetRoundAggression();
     printf("\n--- River Predictions ---\n");
     startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1); // Start with player after dealer
     gameOver = predictionRound(players, numPlayers, &pot, 4, communityCards, cardsRevealed, startPosition, &currentBetAmount);

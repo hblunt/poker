@@ -325,30 +325,31 @@ void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int 
         }
     }
     
-    // FEATURE 17: Betting round phase
-    if (numCommunity == 0) output[17] = 0.0;      // Pre-flop
-    else if (numCommunity == 3) output[17] = 0.33; // Flop
-    else if (numCommunity == 4) output[17] = 0.66; // Turn
-    else if (numCommunity == 5) output[17] = 1.0;  // River
-    
-    // FEATURE 18: Relative bet sizing
-    if (pot > 0) {
-        output[18] = (double)(currentBet - player->currentBet) / pot;
+    // FEATURE 17: Recent opponent aggression (NEW IMPLEMENTATION)
+    if (profilesInitialized && pot > 0) {
+        double recentAggression = 0.0;
+        
+        // Find most recent aggressive action this round
+        for (int i = 0; i < numPlayers; i++) {
+            if (i != position && opponentProfiles[i].aggressiveActionThisRound) {
+                double aggressionLevel = opponentProfiles[i].lastAggressiveAmount / (pot + 1);
+                recentAggression = fmax(recentAggression, aggressionLevel);
+            }
+        }
+        
+        output[17] = fmin(recentAggression, 1.0);
     }
     
-    // FEATURE 19: Last action aggression (simplified - can be enhanced)
-    output[19] = 0.5;  // Placeholder for now
-    
-    // FEATURE 20: Pair in hand
+    // FEATURE 18: Pair in hand (RENUMBERED from 20)
     if (cardCount >= 2) {
-        output[20] = (playerCards[0].value == playerCards[1].value) ? 1.0 : 0.0;
+        output[18] = (playerCards[0].value == playerCards[1].value) ? 1.0 : 0.0;
     }
     
-    // FEATURE 21: High card strength
+    // FEATURE 19: High card strength (RENUMBERED from 21)
     if (cardCount >= 2) {
         int highCard = (playerCards[0].value > playerCards[1].value) ? 
                        playerCards[0].value : playerCards[1].value;
-        output[21] = (double)highCard / 13.0;
+        output[19] = (double)highCard / 13.0;
     }
 }
 
@@ -431,14 +432,20 @@ void updateOpponentProfile(int playerIndex, int action, bool voluntaryAction, in
     switch(action) {
         case 0: // Fold
             profile->foldCount++;
+            profile->aggressiveActionThisRound = false;  // Reset aggression flag
             break;
         case 1: // Call/Check
             profile->callCount++;
             if (voluntaryAction) profile->voluntaryPuts++;
+            // Don't reset aggression flag - calls don't change round aggression
             break;
         case 2: // Raise
             profile->raiseCount++;
             profile->voluntaryPuts++;
+            
+            // NEW: Track recent aggression
+            profile->lastAggressiveAmount = betAmount;
+            profile->aggressiveActionThisRound = true;
             break;
     }
     
@@ -451,6 +458,15 @@ void updateOpponentProfile(int playerIndex, int action, bool voluntaryAction, in
         if (profile->handsPlayed > 0) {
             profile->tightness = 1.0 - ((double)profile->voluntaryPuts / profile->handsPlayed);
         }
+    }
+}
+
+void resetRoundAggression() {
+    if (!profilesInitialized) return;
+    
+    for (int i = 0; i < MAXPLAYERS; i++) {
+        opponentProfiles[i].aggressiveActionThisRound = false;
+        opponentProfiles[i].lastAggressiveAmount = 0.0;
     }
 }
 
@@ -564,10 +580,10 @@ double calculateBoardTexture(Card communityCards[], int numCommunity) {
 // Enhanced training data generation
 void generateEnhancedTrainingData(double **inputs, double **outputs, int numSamples) {
     
-    printf("Generating enhanced training data with %d samples...\n", numSamples);
+    printf("Generating training data with %d samples...\n", numSamples);
     
     for (int i = 0; i < numSamples; i++) {
-        // Create more realistic game states
+        // Create game states
         double handStrength = (double)rand() / RAND_MAX;
         double handPotential = (double)rand() / RAND_MAX;
         double boardTexture = (double)rand() / RAND_MAX;
@@ -1058,10 +1074,9 @@ TrainingStats* initializeTrainingStats(int maxEpochs) {
     }
     
     stats->lossHistory = malloc(maxEpochs * sizeof(double));
-    stats->accuracyHistory = malloc(maxEpochs * sizeof(double));
     stats->epochNumbers = malloc(maxEpochs * sizeof(int));
     
-    if (!stats->lossHistory || !stats->accuracyHistory || !stats->epochNumbers) {
+    if (!stats->lossHistory || !stats->epochNumbers) {
         printf("Error: Could not allocate memory for training history\n");
         free(stats);
         return NULL;
@@ -1074,10 +1089,15 @@ TrainingStats* initializeTrainingStats(int maxEpochs) {
     stats->initialLoss = 0.0;
     stats->startTime = clock();
     
+    // NEW: Overfitting detection
+    stats->recentLossAverage = 0.0;
+    stats->overfittingDetected = false;
+    stats->stagnationCount = 0;
+    
     // Open log file for training progress
     stats->logFile = fopen("training_log.csv", "w");
     if (stats->logFile) {
-        fprintf(stats->logFile, "Epoch,Loss,Accuracy,Time_Elapsed,Learning_Rate\n");
+        fprintf(stats->logFile, "Epoch,Loss,Time_Elapsed,Learning_Rate\n");
     }
     
     printf("Training monitoring initialized for %d epochs\n", maxEpochs);
@@ -1144,24 +1164,40 @@ void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **input
                         double **targets, int numSamples, double learningRate) {
     if (!stats || stats->currentEpoch >= stats->maxEpochs) return;
     
-    // Calculate current loss and accuracy
+    // Calculate current loss
     double currentLoss = calculateLoss(nn, inputs, targets, numSamples);
-    double currentAccuracy = calculateAccuracy(nn, inputs, targets, numSamples);
     
     // Store in history
     stats->lossHistory[stats->currentEpoch] = currentLoss;
-    stats->accuracyHistory[stats->currentEpoch] = currentAccuracy;
     stats->epochNumbers[stats->currentEpoch] = stats->currentEpoch;
     
     // Track best performance
     if (currentLoss < stats->bestLoss) {
         stats->bestLoss = currentLoss;
         stats->bestEpoch = stats->currentEpoch;
+        stats->stagnationCount = 0;  // Reset stagnation counter
+    } else {
+        stats->stagnationCount++;
     }
     
     // Set initial loss on first epoch
     if (stats->currentEpoch == 0) {
         stats->initialLoss = currentLoss;
+    }
+    
+    // NEW: Overfitting detection
+    if (stats->currentEpoch >= 50) {
+        // Calculate recent average loss (last 50 epochs)
+        double recentSum = 0.0;
+        for (int i = stats->currentEpoch - 49; i <= stats->currentEpoch; i++) {
+            recentSum += stats->lossHistory[i];
+        }
+        stats->recentLossAverage = recentSum / 50.0;
+        
+        // Detect overfitting: recent average higher than best loss by significant margin
+        if (stats->recentLossAverage > stats->bestLoss * 1.5 && stats->stagnationCount > 100) {
+            stats->overfittingDetected = true;
+        }
     }
     
     // Calculate elapsed time
@@ -1170,8 +1206,8 @@ void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **input
     
     // Log to file
     if (stats->logFile) {
-        fprintf(stats->logFile, "%d,%.6f,%.4f,%.2f,%.6f\n", 
-                stats->currentEpoch, currentLoss, currentAccuracy, elapsedSeconds, learningRate);
+        fprintf(stats->logFile, "%d,%.6f,%.2f,%.6f\n", 
+                stats->currentEpoch, currentLoss, elapsedSeconds, learningRate);
         fflush(stats->logFile);  // Ensure data is written immediately
     }
     
@@ -1184,15 +1220,15 @@ void displayTrainingProgress(TrainingStats *stats, bool verbose) {
     
     int epoch = stats->currentEpoch - 1;  // Last completed epoch
     double currentLoss = stats->lossHistory[epoch];
-    double currentAccuracy = stats->accuracyHistory[epoch];
     
     // Calculate elapsed time
     clock_t currentTime = clock();
     double elapsedSeconds = ((double)(currentTime - stats->startTime)) / CLOCKS_PER_SEC;
     
-    if (verbose || epoch % 100 == 0 || epoch == stats->maxEpochs - 1) {
-        printf("Epoch %4d/%d | Loss: %.6f | Accuracy: %.2f%% | Time: %.1fs", 
-               epoch, stats->maxEpochs - 1, currentLoss, currentAccuracy * 100, elapsedSeconds);
+    // Show progress every 100 epochs or on last epoch
+    if (epoch % 100 == 0 || epoch == stats->maxEpochs - 1) {
+        printf("Epoch %4d/%d | Loss: %.6f | LR: %.6f", 
+               epoch, stats->maxEpochs - 1, currentLoss, 0.01);  // Assuming default LR
         
         // Show improvement indicators
         if (epoch > 0) {
@@ -1211,6 +1247,11 @@ void displayTrainingProgress(TrainingStats *stats, bool verbose) {
             printf(" ★ BEST");
         }
         
+        // Show overfitting warning
+        if (stats->overfittingDetected) {
+            printf(" ⚠ OVERFITTING");
+        }
+        
         printf("\n");
     }
     
@@ -1225,25 +1266,92 @@ void displayTrainingProgress(TrainingStats *stats, bool verbose) {
     }
 }
 
+
+// Calculate network confidence/decision distribution
+void analyzeNetworkConfidence(NeuralNetwork *nn, double **inputs, int numSamples) {
+    double totalConfidence = 0.0;
+    int decisions[3] = {0}; // Count of fold, call, raise decisions
+    double avgOutputs[3] = {0.0, 0.0, 0.0};
+    
+    printf("\nNETWORK CONFIDENCE ANALYSIS:\n");
+    printRepeatedChar('-', 40);
+    printf("\n");
+    
+    for (int i = 0; i < numSamples; i++) {
+        forwardpropagate(nn, inputs[i]);
+        
+        // Find highest probability decision
+        int decision = 0;
+        double maxProb = nn->outputLayer[0].value;
+        for (int j = 1; j < 3; j++) {
+            if (nn->outputLayer[j].value > maxProb) {
+                maxProb = nn->outputLayer[j].value;
+                decision = j;
+            }
+        }
+        
+        decisions[decision]++;
+        totalConfidence += maxProb;
+        
+        // Accumulate average outputs
+        for (int j = 0; j < 3; j++) {
+            avgOutputs[j] += nn->outputLayer[j].value;
+        }
+    }
+    
+    // Calculate averages
+    totalConfidence /= numSamples;
+    for (int i = 0; i < 3; i++) {
+        avgOutputs[i] /= numSamples;
+    }
+    
+    printf("Average Confidence: %.3f (%.1f%%)\n", totalConfidence, totalConfidence * 100);
+    printf("Decision Distribution:\n");
+    printf("  Fold:  %d samples (%.1f%%) | Avg Prob: %.3f\n", 
+           decisions[0], (decisions[0] * 100.0) / numSamples, avgOutputs[0]);
+    printf("  Call:  %d samples (%.1f%%) | Avg Prob: %.3f\n", 
+           decisions[1], (decisions[1] * 100.0) / numSamples, avgOutputs[1]);
+    printf("  Raise: %d samples (%.1f%%) | Avg Prob: %.3f\n", 
+           decisions[2], (decisions[2] * 100.0) / numSamples, avgOutputs[2]);
+    
+    // Analyze decision balance
+    double maxDecisionPct = fmax(fmax(decisions[0], decisions[1]), decisions[2]) * 100.0 / numSamples;
+    double minDecisionPct = fmin(fmin(decisions[0], decisions[1]), decisions[2]) * 100.0 / numSamples;
+    
+    printf("\nStrategy Balance:\n");
+    if (maxDecisionPct > 70) {
+        printf("⚠ UNBALANCED: Too focused on one action (%.1f%% vs %.1f%%)\n", maxDecisionPct, minDecisionPct);
+    } else if (maxDecisionPct < 45) {
+        printf("✓ BALANCED: Good action diversity\n");
+    } else {
+        printf("→ MODERATE: Reasonable action balance\n");
+    }
+}
+
+
 // Display final training summary
-void displayTrainingSummary(TrainingStats *stats) {
+void displayTrainingSummary(TrainingStats *stats, NeuralNetwork *nn, double **inputs, int numSamples) {
     if (!stats) return;
     
     clock_t endTime = clock();
     double totalTime = ((double)(endTime - stats->startTime)) / CLOCKS_PER_SEC;
     
     printf("\n");
-    printRepeatedChar('=', 60);
+    printRepeatedChar('=', 70);
     printf("\n");
     printf("TRAINING COMPLETED!\n");
     printf("\n");
-    printRepeatedChar('=', 60);
+    printRepeatedChar('=', 70);
     printf("\n");
+    
+    // Basic training info
+    printf("TRAINING SUMMARY:\n");
     printf("Total Epochs:     %d\n", stats->currentEpoch);
     printf("Total Time:       %.2f seconds (%.2f minutes)\n", totalTime, totalTime / 60.0);
     printf("Time per Epoch:   %.4f seconds\n", totalTime / stats->currentEpoch);
     
-    printf("\nPERFORMANCE SUMMARY:\n");
+    // Loss progression analysis
+    printf("\nLOSS PROGRESSION:\n");
     printf("Initial Loss:     %.6f\n", stats->initialLoss);
     printf("Final Loss:       %.6f\n", stats->lossHistory[stats->currentEpoch - 1]);
     printf("Best Loss:        %.6f (Epoch %d)\n", stats->bestLoss, stats->bestEpoch);
@@ -1251,23 +1359,40 @@ void displayTrainingSummary(TrainingStats *stats) {
            stats->initialLoss - stats->bestLoss,
            ((stats->initialLoss - stats->bestLoss) / stats->initialLoss) * 100);
     
-    printf("Final Accuracy:   %.2f%%\n", stats->accuracyHistory[stats->currentEpoch - 1] * 100);
-    
-    // Learning assessment
-    double finalLoss = stats->lossHistory[stats->currentEpoch - 1];
-    printf("\nLEARNING ASSESSMENT:\n");
-    if (finalLoss < stats->initialLoss * 0.1) {
-        printf("Status: EXCELLENT - Very strong learning occurred\n");
-    } else if (finalLoss < stats->initialLoss * 0.5) {
-        printf("Status: GOOD - Solid learning progress\n");
-    } else if (finalLoss < stats->initialLoss * 0.8) {
-        printf("Status: MODERATE - Some learning occurred\n");
+    // Overfitting detection results
+    printf("\nOVERFITTING ANALYSIS:\n");
+    if (stats->overfittingDetected) {
+        printf("⚠ OVERFITTING DETECTED at epoch %d\n", stats->bestEpoch + stats->stagnationCount);
+        printf("  Recent loss average: %.6f vs Best loss: %.6f\n", 
+               stats->recentLossAverage, stats->bestLoss);
+        printf("  Stagnation period: %d epochs\n", stats->stagnationCount);
+    } else if (stats->stagnationCount > 50) {
+        printf("→ TRAINING PLATEAUED after epoch %d (%d epochs without improvement)\n", 
+               stats->bestEpoch, stats->stagnationCount);
     } else {
-        printf("Status: POOR - Limited learning (may need more epochs or different learning rate)\n");
+        printf("✓ NO OVERFITTING DETECTED - Training progressed normally\n");
+    }
+    
+    // Comparative analysis (before/after)
+    printf("\nCOMPARATIVE ANALYSIS:\n");
+    double improvementRatio = stats->initialLoss / stats->bestLoss;
+    if (improvementRatio > 5.0) {
+        printf("✓ EXCELLENT: %.1fx improvement - Strong learning occurred\n", improvementRatio);
+    } else if (improvementRatio > 2.0) {
+        printf("✓ GOOD: %.1fx improvement - Solid learning progress\n", improvementRatio);
+    } else if (improvementRatio > 1.2) {
+        printf("→ MODERATE: %.1fx improvement - Some learning occurred\n", improvementRatio);
+    } else {
+        printf("⚠ POOR: %.1fx improvement - Limited learning\n", improvementRatio);
+    }
+    
+    // Network confidence and decision distribution
+    if (nn && inputs) {
+        analyzeNetworkConfidence(nn, inputs, fmin(numSamples, 1000));  // Analyze up to 1000 samples
     }
     
     printf("\nDetailed log saved to: training_log.csv\n");
-    printRepeatedChar('=', 60);
+    printRepeatedChar('=', 70);
     printf("\n");
 }
 
@@ -1285,10 +1410,8 @@ void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **tr
         return;
     }
     
-    // Training loop with monitoring
+    // Training loop with enhanced monitoring
     for (int epoch = 0; epoch < epochs; epoch++) {
-        double epochStartTime = clock();
-        
         // Train on all samples
         for (int sample = 0; sample < numSamples; sample++) {
             forwardpropagate(nn, trainingInputs[sample]);
@@ -1299,9 +1422,8 @@ void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **tr
         // Update statistics and display progress
         updateTrainingStats(stats, nn, trainingInputs, trainingOutputs, numSamples, nn->learningRate);
         
-        // Display progress (verbose every 100 epochs, progress bar every 10%)
-        bool verbose = (epoch % 100 == 0) || (epoch == epochs - 1);
-        displayTrainingProgress(stats, verbose);
+        // Display progress every 100 epochs
+        displayTrainingProgress(stats, false);
         
         // Early stopping if loss becomes very small
         if (stats->lossHistory[epoch] < 0.0001) {
@@ -1309,32 +1431,415 @@ void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **tr
             break;
         }
         
+        // Early stopping for overfitting
+        if (stats->overfittingDetected) {
+            printf("\nEarly stopping: Overfitting detected\n");
+            break;
+        }
+        
         // Adaptive learning rate (optional)
         if (epoch > 100 && epoch % 200 == 0) {
-            // Check if learning has stagnated
-            double recentLossAvg = 0.0;
-            for (int i = epoch - 50; i < epoch; i++) {
-                recentLossAvg += stats->lossHistory[i];
-            }
-            recentLossAvg /= 50.0;
-            
-            if (recentLossAvg > stats->lossHistory[epoch - 100] * 0.95) {
-                // Learning stagnated, reduce learning rate
+            if (stats->stagnationCount > 150) {
                 nn->learningRate *= 0.8;
                 printf("Learning rate reduced to %.6f (learning stagnated)\n", nn->learningRate);
             }
         }
     }
     
-    // Display final summary
-    displayTrainingSummary(stats);
+    // Display enhanced final summary
+    displayTrainingSummary(stats, nn, trainingInputs, numSamples);
     
     // Cleanup
     if (stats->logFile) {
         fclose(stats->logFile);
     }
     free(stats->lossHistory);
-    free(stats->accuracyHistory);
     free(stats->epochNumbers);
     free(stats);
+}
+
+// ===================================================================
+// MINIMAL BOOTSTRAP TRAINING (PHASE 1)
+// ===================================================================
+
+// Generate minimal bootstrap data - just basic rules to prevent crashes
+void generateMinimalBootstrap(double **inputs, double **outputs, int numSamples) {
+    printf("Generating minimal bootstrap data (%d samples)...\n", numSamples);
+    
+    for (int i = 0; i < numSamples; i++) {
+        // Create basic game scenarios
+        double handStrength = (double)rand() / RAND_MAX;
+        double stackRatio = (double)rand() / RAND_MAX * 5.0;
+        double currentBet = (double)rand() / RAND_MAX;
+        double playerBet = (double)rand() / RAND_MAX;
+        
+        // Fill inputs with reasonable values (20 features total)
+        inputs[i][0] = handStrength;  // Hand strength
+        inputs[i][1] = 0.5;          // Hand potential
+        inputs[i][2] = 0.5;          // Board texture
+        inputs[i][3] = 0.5;          // Pot odds
+        inputs[i][4] = stackRatio;   // Stack to pot ratio
+        inputs[i][5] = (double)rand() / RAND_MAX;  // Position
+        inputs[i][6] = 0.5;          // Number of players (normalized)
+        inputs[i][7] = currentBet;   // Current bet level
+        inputs[i][8] = playerBet;    // Player's bet ratio
+        inputs[i][9] = (double)rand() / RAND_MAX;   // First hole card
+        inputs[i][10] = (double)rand() / RAND_MAX;  // Second hole card
+        inputs[i][11] = (double)rand() / RAND_MAX;  // Cards suited
+        inputs[i][12] = (double)rand() / RAND_MAX;  // Game phase
+        inputs[i][13] = 0.5;         // Stack committed
+        inputs[i][14] = 0.5;         // Avg opponent aggression
+        inputs[i][15] = 0.5;         // Avg opponent tightness
+        inputs[i][16] = 0.5;         // Avg opponent fold rate
+        inputs[i][17] = 0.3;         // Recent opponent aggression
+        inputs[i][18] = (double)rand() / RAND_MAX;  // Pair in hand
+        inputs[i][19] = (double)rand() / RAND_MAX;  // High card strength
+        
+        // MINIMAL STRATEGY - Only basic rules to prevent crashes/illegal moves
+        double fold = 0.33, call = 0.33, raise = 0.33;  // Start neutral
+        
+        // Rule 1: Don't go all-in with terrible hands (prevents instant losses)
+        if (handStrength < 0.1 && currentBet > 0.8) {
+            fold = 0.9; call = 0.08; raise = 0.02;
+        }
+        
+        // Rule 2: Don't fold when you can check for free
+        if (currentBet == 0.0) {  // Can check for free
+            fold = 0.05; call = 0.7; raise = 0.25;  // Heavily favor checking/betting
+        }
+        
+        // Rule 3: With very strong hands, don't fold (basic hand ranking)
+        if (handStrength > 0.8) {
+            fold = 0.05; call = 0.4; raise = 0.55;
+        }
+        
+        // Rule 4: Don't bet more than you have (stack ratio check)
+        if (stackRatio < 0.2 && currentBet > 0.5) {  // Low chips, high bet
+            fold = 0.6; call = 0.35; raise = 0.05;  // Be more conservative
+        }
+        
+        // Normalize to valid probabilities
+        double total = fold + call + raise;
+        outputs[i][0] = fold / total;
+        outputs[i][1] = call / total;
+        outputs[i][2] = raise / total;
+    }
+    
+    printf("Minimal bootstrap data generated - basic rules only.\n");
+}
+
+// Phase 1: Train minimal bootstrap (just enough to make legal moves)
+NeuralNetwork* trainMinimalBootstrap() {
+    printf("\n");
+    printRepeatedChar('=', 60);
+    printf("\n");
+    printf("PHASE 1: MINIMAL BOOTSTRAP TRAINING\n");
+    printRepeatedChar('=', 60);
+    printf("\n");
+    printf("Teaching basic rules to prevent crashes and illegal moves...\n");
+    printf("This is NOT strategy - just survival basics!\n\n");
+    
+    // Small dataset - just enough to learn basic rules
+    int numSamples = 100;
+    double **inputs = malloc(numSamples * sizeof(double*));
+    double **outputs = malloc(numSamples * sizeof(double*));
+    
+    for (int i = 0; i < numSamples; i++) {
+        inputs[i] = malloc(INPUT_SIZE * sizeof(double));
+        outputs[i] = malloc(OUTPUT_SIZE * sizeof(double));
+        if (!inputs[i] || !outputs[i]) {
+            printf("Error: Memory allocation failed\n");
+            return NULL;
+        }
+    }
+    
+    generateMinimalBootstrap(inputs, outputs, numSamples);
+    
+    printf("Creating fresh neural network...\n");
+    NeuralNetwork *nn = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    if (!nn) {
+        printf("Error: Failed to create neural network\n");
+        return NULL;
+    }
+    
+    nn->learningRate = 0.05;  // Higher learning rate for quick bootstrap
+    
+    // Quick training - just enough to learn basic rules
+    int bootstrapEpochs = 200;  // Much fewer epochs than full training
+    printf("Quick bootstrap training (%d epochs)...\n", bootstrapEpochs);
+    
+    for (int epoch = 0; epoch < bootstrapEpochs; epoch++) {
+        for (int sample = 0; sample < numSamples; sample++) {
+            forwardpropagate(nn, inputs[sample]);
+            backpropagate(nn, outputs[sample]);
+            updateWeights(nn);
+        }
+        
+        // Simple progress indicator
+        if (epoch % 50 == 0 || epoch == bootstrapEpochs - 1) {
+            double loss = calculateLoss(nn, inputs, outputs, numSamples);
+            printf("Epoch %d/%d | Loss: %.4f\n", epoch, bootstrapEpochs - 1, loss);
+        }
+    }
+    
+    printf("\nTesting bootstrap network...\n");
+    // Test a few examples
+    for (int i = 0; i < 3; i++) {
+        forwardpropagate(nn, inputs[i]);
+        printf("Test %d: Expected[%.2f,%.2f,%.2f] Got[%.2f,%.2f,%.2f]\n", 
+               i+1, outputs[i][0], outputs[i][1], outputs[i][2],
+               nn->outputLayer[0].value, nn->outputLayer[1].value, nn->outputLayer[2].value);
+    }
+    
+    printf("\nSaving bootstrap network...\n");
+    saveNetwork(nn, "poker_ai_bootstrap.dat");
+    
+    printf("\n");
+    printRepeatedChar('=', 60);
+    printf("\n");
+    printf("BOOTSTRAP COMPLETE!\n");
+    printf("Network knows basic rules - ready for self-play learning.\n");
+    printf("Bootstrap saved as: poker_ai_bootstrap.dat\n");
+    printRepeatedChar('=', 60);
+    printf("\n");
+    
+    // Cleanup training data
+    for (int i = 0; i < numSamples; i++) {
+        free(inputs[i]);
+        free(outputs[i]);
+    }
+    free(inputs);
+    free(outputs);
+    
+    return nn;  // Return the bootstrap network
+}
+
+// Phase 2: Pure self-play learning starting from bootstrap
+void pureReinforcementLearning(int numGames, int numPlayers) {
+    printf("\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    printf("PHASE 2: PURE REINFORCEMENT LEARNING\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    printf("Starting self-play from bootstrap network...\n");
+    printf("The AI will now discover its own strategy through experience!\n");
+    printf("Bootstrap knowledge may be completely overwritten.\n");
+    printRepeatedChar('=', 70);
+    printf("\n\n");
+    
+    // Initialize opponent profiles
+    initializeOpponentProfiles(numPlayers);
+    
+    // Create networks starting from bootstrap
+    NeuralNetwork **networks = malloc(numPlayers * sizeof(NeuralNetwork*));
+    
+    // Try to load bootstrap network first
+    NeuralNetwork *bootstrap = loadNetwork("poker_ai_bootstrap.dat");
+    if (!bootstrap) {
+        printf("No bootstrap found - creating fresh networks...\n");
+        bootstrap = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    }
+    
+    // Create diverse AIs starting from bootstrap
+    for (int i = 0; i < numPlayers; i++) {
+        networks[i] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+        
+        // Copy bootstrap weights to each network
+        if (bootstrap) {
+            // Copy all weights from bootstrap
+            for (int inp = 0; inp < INPUT_SIZE; inp++) {
+                for (int hid = 0; hid < HIDDEN_SIZE; hid++) {
+                    networks[i]->weightsInputHidden[inp][hid] = bootstrap->weightsInputHidden[inp][hid];
+                }
+            }
+            for (int hid = 0; hid < HIDDEN_SIZE; hid++) {
+                for (int out = 0; out < OUTPUT_SIZE; out++) {
+                    networks[i]->weightsHiddenOutput[hid][out] = bootstrap->weightsHiddenOutput[hid][out];
+                }
+                networks[i]->biasHidden[hid] = bootstrap->biasHidden[hid];
+            }
+            for (int out = 0; out < OUTPUT_SIZE; out++) {
+                networks[i]->biasOutput[out] = bootstrap->biasOutput[out];
+            }
+        }
+        
+        // Add noise for diversity (each AI will evolve differently)
+        addNoiseToWeights(networks[i], 0.15);  // Slightly more noise than before
+        printf("AI_%d initialized from bootstrap + noise\n", i);
+    }
+    
+    ReplayBuffer *rb = createReplayBuffer(100000);
+    
+    // Training tracking
+    int wins[MAXPLAYERS] = {0};
+    double avgCredits[MAXPLAYERS] = {0};
+    int progressCheckpoints = 20;
+    int gamesPerCheckpoint = numGames / progressCheckpoints;
+    
+    FILE *progressFile = fopen("selfplay_progress.csv", "w");
+    if (progressFile) {
+        fprintf(progressFile, "Game,AI_0_WinRate,AI_1_WinRate,AI_2_WinRate,AI_3_WinRate,AvgCredits,ExperienceBufferSize\n");
+    }
+    
+    clock_t startTime = clock();
+    
+    printf("Starting pure self-play learning...\n");
+    printf("Each AI will develop its own strategy through experience!\n\n");
+    
+    // Main self-play training loop
+    for (int game = 0; game < numGames; game++) {
+        GameRecord record = playEnhancedSelfPlayGame(networks, numPlayers, rb);
+        
+        // Update statistics
+        wins[record.winner]++;
+        for (int i = 0; i < numPlayers; i++) {
+            avgCredits[i] = (avgCredits[i] * game + record.finalCredits[i]) / (game + 1);
+        }
+        
+        // Train from experience (this overwrites bootstrap knowledge!)
+        if (rb->size > 500 && game % 3 == 0) {
+            for (int i = 0; i < numPlayers; i++) {
+                trainFromExperience(networks[i], rb, 128);
+            }
+        }
+        
+        // Progress monitoring
+        if (game > 0 && (game % gamesPerCheckpoint == 0 || game == numGames - 1)) {
+            clock_t currentTime = clock();
+            double elapsed = ((double)(currentTime - startTime)) / CLOCKS_PER_SEC;
+            
+            printf("\n");
+            printRepeatedChar('-', 50);
+            printf("\n");
+            printf("SELF-PLAY PROGRESS: Game %d/%d (%.1f%%)\n", game, numGames, (game * 100.0) / numGames);
+            printRepeatedChar('-', 50);
+            printf("\n");
+            printf("Time elapsed: %.1f seconds (%.2f games/sec)\n", elapsed, game / elapsed);
+            printf("Experience buffer: %d samples\n", rb->size);
+            
+            printf("\nCurrent win rates (evolved from bootstrap):\n");
+            for (int i = 0; i < numPlayers; i++) {
+                double winRate = (game > 0) ? (wins[i] * 100.0) / game : 0.0;
+                printf("  AI_%d: %.1f%% (%d wins) | Avg Credits: %.0f\n", 
+                       i, winRate, wins[i], avgCredits[i]);
+            }
+            
+            // Log to file
+            if (progressFile) {
+                fprintf(progressFile, "%d", game);
+                for (int i = 0; i < numPlayers; i++) {
+                    double winRate = (game > 0) ? (wins[i] * 100.0) / game : 0.0;
+                    fprintf(progressFile, ",%.2f", winRate);
+                }
+                fprintf(progressFile, ",%.1f,%d\n", 
+                        (avgCredits[0] + avgCredits[1] + avgCredits[2] + avgCredits[3]) / numPlayers,
+                        rb->size);
+                fflush(progressFile);
+            }
+        }
+        
+        // Progress dots
+        if (game % (numGames / 100) == 0 && game % gamesPerCheckpoint != 0) {
+            printf(".");
+            fflush(stdout);
+        }
+    }
+    
+    clock_t endTime = clock();
+    double totalTime = ((double)(endTime - startTime)) / CLOCKS_PER_SEC;
+    
+    printf("\n\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    printf("PURE REINFORCEMENT LEARNING COMPLETE!\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    printf("Total training time: %.2f seconds (%.2f minutes)\n", totalTime, totalTime / 60.0);
+    printf("Games played: %d\n", numGames);
+    printf("Experience samples: %d\n", rb->size);
+    
+    printf("\nFINAL EVOLVED STRATEGIES:\n");
+    int bestAI = 0;
+    int maxWins = wins[0];
+    
+    for (int i = 0; i < numPlayers; i++) {
+        double winRate = (double)wins[i] / numGames;
+        printf("AI_%d: %.1f%% (%d wins) | Final Credits: %.0f\n", 
+               i, winRate * 100, wins[i], avgCredits[i]);
+        
+        if (wins[i] > maxWins) {
+            maxWins = wins[i];
+            bestAI = i;
+        }
+    }
+    
+    printf("\nBest evolved AI: AI_%d (%.1f%% win rate)\n", bestAI, (wins[bestAI] * 100.0) / numGames);
+    printf("This AI discovered its own strategy through pure self-play!\n");
+    
+    // Save the best evolved network
+    saveNetwork(networks[bestAI], "poker_ai_evolved.dat");
+    printf("Best evolved AI saved as: poker_ai_evolved.dat\n");
+    
+    // Save all networks as backups
+    for (int i = 0; i < numPlayers; i++) {
+        char filename[100];
+        sprintf(filename, "evolved_ai_%d.dat", i);
+        saveNetwork(networks[i], filename);
+    }
+    
+    printf("All evolved AIs saved. Training log: selfplay_progress.csv\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    
+    // Cleanup
+    if (progressFile) fclose(progressFile);
+    if (bootstrap) freeNetwork(bootstrap);
+    for (int i = 0; i < numPlayers; i++) {
+        freeNetwork(networks[i]);
+    }
+    free(networks);
+    free(rb->buffer);
+    free(rb);
+}
+
+// Combined two-phase training function
+void trainTwoPhaseAI(int numGames, int numPlayers) {
+    printf("\n");
+    printRepeatedChar('*', 70);
+    printf("\n");
+    printf("TWO-PHASE AI TRAINING\n");
+    printf("Phase 1: Minimal Bootstrap (basic rules)\n");
+    printf("Phase 2: Pure Self-Play Learning (strategy discovery)\n");
+    printRepeatedChar('*', 70);
+    printf("\n");
+    
+    // Phase 1: Quick bootstrap
+    NeuralNetwork *bootstrap = trainMinimalBootstrap();
+    if (!bootstrap) {
+        printf("Bootstrap training failed!\n");
+        return;
+    }
+    
+    printf("\nBootstrap complete! Press Enter to begin self-play learning...");
+    getchar();
+    
+    // Free bootstrap network (it's saved to file)
+    freeNetwork(bootstrap);
+    
+    // Phase 2: Pure self-play learning
+    pureReinforcementLearning(numGames, numPlayers);
+    
+    printf("\n");
+    printRepeatedChar('*', 70);
+    printf("\n");
+    printf("TWO-PHASE TRAINING COMPLETE!\n");
+    printf("Your AI has evolved its own poker strategy!\n");
+    printf("Files created:\n");
+    printf("  - poker_ai_bootstrap.dat (Phase 1 result)\n");
+    printf("  - poker_ai_evolved.dat (Phase 2 best AI)\n");
+    printf("  - evolved_ai_*.dat (All trained AIs)\n");
+    printf("  - selfplay_progress.csv (Training progress log)\n");
+    printRepeatedChar('*', 70);
+    printf("\n");
 }

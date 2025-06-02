@@ -7,38 +7,62 @@
 NeuralNetwork *aiNetwork = NULL;
 
 // Initialize AI with enhanced network
+
 void initialiseAI() {
-    // Try to load enhanced network first
-    printf("Which network would you like to use?\n\n");
-    printf("1. Self-play trained AI\n");
-    printf("2. Basic AI\n\n");
-    int choice;
-    printf("Choice: ");
-    scanf(" %d", &choice);
-    clearInputBuffer();
+    printf("Loading AI system...\n");
     
-    switch (choice) {
-        case 1:
-            printf("Loading self-play trained AI...\n");
-            aiNetwork = loadNetwork("poker_ai_enhanced_monitored.dat");
-            printf("Self-play AI initialised successfully.\n");
-            break;
-        case 2:
-            printf("Loading basic AI...\n");
-            aiNetwork = loadNetwork("poker_ai.dat");
-            printf("Basic AI initialised successfully.\n");
-            break;
-        default:
-            printf("Invalid choice. Defaulting to self-play trained AI.\n");
-            aiNetwork = loadNetwork("poker_ai_enhanced_monitored.dat");
-            break;
+    // New loading priority: Evolved > Bootstrap > Create new
+    printf("Looking for trained AI networks...\n");
+    
+    // First try to load evolved AI (best trained network)
+    aiNetwork = loadNetwork("poker_ai_evolved.dat");
+    if (aiNetwork) {
+        printf("✓ Loaded evolved AI (self-trained through pure reinforcement learning)\n");
+        printf("  This AI discovered its own strategy through thousands of games!\n");
+        return;
     }
     
-    if (!aiNetwork) {
-        // Create new network if none exist
-        printf("No trained AI found. Creating new network...\n");
-        aiNetwork = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    // Try to load any of the evolved backups
+    for (int i = 0; i < 6; i++) {
+        char filename[100];
+        sprintf(filename, "evolved_ai_%d.dat", i);
+        aiNetwork = loadNetwork(filename);
+        if (aiNetwork) {
+            printf("✓ Loaded evolved AI backup %d\n", i);
+            printf("  This AI was trained through pure self-play learning.\n");
+            return;
+        }
     }
+    
+    // Try to load bootstrap network
+    aiNetwork = loadNetwork("poker_ai_bootstrap.dat");
+    if (aiNetwork) {
+        printf("⚠ Loaded bootstrap AI (basic rules only)\n");
+        printf("  This AI only knows basic rules - consider running training!\n");
+        return;
+    }
+    
+    // Try legacy networks for backward compatibility
+    aiNetwork = loadNetwork("poker_ai_enhanced_monitored.dat");
+    if (aiNetwork) {
+        printf("⚠ Loaded legacy enhanced AI (old training method)\n");
+        printf("  Consider retraining with new two-phase approach.\n");
+        return;
+    }
+    
+    aiNetwork = loadNetwork("poker_ai_selfplay_monitored.dat");
+    if (aiNetwork) {
+        printf("⚠ Loaded legacy self-play AI (old training method)\n");
+        printf("  Consider retraining with new two-phase approach.\n");
+        return;
+    }
+    
+    // Last resort - create fresh network
+    printf("❌ No trained AI networks found.\n");
+    printf("Creating fresh neural network with random weights...\n");
+    printf("⚠ WARNING: Untrained AI will make random decisions!\n");
+    printf("💡 TIP: Use option 2 to train the AI first.\n");
+    aiNetwork = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
 }
 
 // Enhanced AI decision making
@@ -65,7 +89,9 @@ int aiMakeDecision(Player *player, Hand *communityCards, int pot, int currentBet
 // Enhanced prediction round with opponent tracking
 bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum, 
                       Hand* communityCards, int cardsRevealed, int startPosition, int *currentBetAmount) {
-    
+    // Reset aggression tracking for new betting round
+    resetRoundAggression();
+
     // Initialize opponent profiles if this is the first round
     static bool initialized = false;
     if (!initialized) {
