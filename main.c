@@ -20,12 +20,13 @@ int main(void) {
     srand(time(NULL));
 
     printf("============================================\n");
-    printf("=          GU HOLD'EM - EVOLVED AI         =\n");
+    printf("=        GU HOLD'EM - EVOLUTIONARY AI      =\n");
     printf("============================================\n");
     printf("=                                          =\n");
     printf("=  1. Play against AI                      =\n");
-    printf("=  2. Train AI (Two-Phase Learning)        =\n");
-    printf("=  3. Play without AI                      =\n");
+    printf("=  2. Train AI (Two-Phase Bootstrap)       =\n");
+    printf("=  3. Train AI (Evolutionary - 1000 AIs)   =\n");
+    printf("=  4. Play without AI                      =\n");
     printf("=                                          =\n");
     printf("============================================\n");
     printf("Choice: ");
@@ -58,7 +59,6 @@ int main(void) {
             printf("Starting two-phase training: %d games with %d AIs\n", games, aiPlayers);
             trainTwoPhaseAI(games, aiPlayers);
             
-            // Automatically show training results and ask if user wants to play
             printf("\nTraining complete! Would you like to play against the evolved AI? (Y/N): ");
             char playChoice;
             scanf(" %c", &playChoice);
@@ -68,11 +68,57 @@ int main(void) {
                 initialiseAI();
                 numPlayers = setupWithAI(players);
             } else {
-                return 0;  // Exit program
+                return 0;
             }
             break;
 
         case '3':
+            printf("\n[EVOLUTIONARY] Starting evolutionary AI training...\n");
+            printf("🧬 Population-based optimization with natural selection\n");
+            printf("🏆 1000 AIs competing over multiple generations\n");
+            printf("⏱️ This will take 2-5 hours but produces exceptional results!\n\n");
+            
+            int populationSize, generations;
+            printf("Population size (recommended: 1000): ");
+            scanf("%d", &populationSize);
+            printf("Number of generations (recommended: 10-15): ");
+            scanf("%d", &generations);
+            clearInputBuffer();
+            
+            if (populationSize < 100) populationSize = 1000;
+            if (populationSize > 5000) populationSize = 5000;
+            if (generations < 5) generations = 10;
+            if (generations > 50) generations = 50;
+            
+            printf("\nStarting evolutionary training: %d AIs over %d generations\n", 
+                   populationSize, generations);
+            printf("⚠️  WARNING: This is computationally intensive!\n");
+            printf("Continue? (Y/N): ");
+            
+            char confirmChoice;
+            scanf(" %c", &confirmChoice);
+            clearInputBuffer();
+            
+            if (confirmChoice == 'Y' || confirmChoice == 'y') {
+                trainEvolutionaryAI(populationSize, generations);
+                
+                printf("\nEvolutionary training complete! Play against the champion? (Y/N): ");
+                scanf(" %c", &playChoice);
+                clearInputBuffer();
+                
+                if (playChoice == 'Y' || playChoice == 'y') {
+                    initialiseAI();
+                    numPlayers = setupWithAI(players);
+                } else {
+                    return 0;
+                }
+            } else {
+                printf("Evolutionary training cancelled.\n");
+                return 0;
+            }
+            break;
+
+        case '4':
             printf("\n[HUMAN] Setting up human-only game...\n");
             numPlayers = setup(players);
             break;

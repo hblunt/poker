@@ -7,18 +7,38 @@
 NeuralNetwork *aiNetwork = NULL;
 
 // Initialize AI with enhanced network
-
 void initialiseAI() {
     printf("Loading AI system...\n");
     
-    // New loading priority: Evolved > Bootstrap > Create new
+    // New loading priority: Evolutionary Champion > Evolved > Bootstrap > Create new
     printf("Looking for trained AI networks...\n");
     
-    // First try to load evolved AI (best trained network)
+    // First try to load evolutionary champion (ultimate AI)
+    aiNetwork = loadNetwork("poker_ai_evolved_champion.dat");
+    if (aiNetwork) {
+        printf("🏆 Loaded EVOLUTIONARY CHAMPION AI!\n");
+        printf("   This AI survived natural selection among 1000+ competitors!\n");
+        printf("   Prepare for the ultimate poker challenge! 🧬\n");
+        return;
+    }
+    
+    // Try to load any of the evolved champions (top 10)
+    for (int i = 0; i < 10; i++) {
+        char filename[100];
+        sprintf(filename, "evolved_champion_%d.dat", i);
+        aiNetwork = loadNetwork(filename);
+        if (aiNetwork) {
+            printf("🥇 Loaded evolved champion #%d from evolutionary training\n", i);
+            printf("   This AI is one of the top 10 from population-based optimization.\n");
+            return;
+        }
+    }
+    
+    // Try to load regular evolved AI (from two-phase training)
     aiNetwork = loadNetwork("poker_ai_evolved.dat");
     if (aiNetwork) {
-        printf("✓ Loaded evolved AI (self-trained through pure reinforcement learning)\n");
-        printf("  This AI discovered its own strategy through thousands of games!\n");
+        printf("✓ Loaded evolved AI (self-trained through reinforcement learning)\n");
+        printf("  This AI discovered its own strategy through thousands of games.\n");
         return;
     }
     
@@ -29,7 +49,7 @@ void initialiseAI() {
         aiNetwork = loadNetwork(filename);
         if (aiNetwork) {
             printf("✓ Loaded evolved AI backup %d\n", i);
-            printf("  This AI was trained through pure self-play learning.\n");
+            printf("  This AI was trained through self-play learning.\n");
             return;
         }
     }
@@ -46,14 +66,14 @@ void initialiseAI() {
     aiNetwork = loadNetwork("poker_ai_enhanced_monitored.dat");
     if (aiNetwork) {
         printf("⚠ Loaded legacy enhanced AI (old training method)\n");
-        printf("  Consider retraining with new two-phase approach.\n");
+        printf("  Consider retraining with evolutionary approach.\n");
         return;
     }
     
     aiNetwork = loadNetwork("poker_ai_selfplay_monitored.dat");
     if (aiNetwork) {
         printf("⚠ Loaded legacy self-play AI (old training method)\n");
-        printf("  Consider retraining with new two-phase approach.\n");
+        printf("  Consider retraining with evolutionary approach.\n");
         return;
     }
     
@@ -61,8 +81,16 @@ void initialiseAI() {
     printf("❌ No trained AI networks found.\n");
     printf("Creating fresh neural network with random weights...\n");
     printf("⚠ WARNING: Untrained AI will make random decisions!\n");
-    printf("💡 TIP: Use option 2 to train the AI first.\n");
+    printf("💡 TIP: Use option 2 or 3 to train the AI first.\n");
+    printf("🧬 RECOMMENDATION: Try option 3 (Evolutionary) for ultimate AI!\n");
     aiNetwork = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+}
+
+// ADD utility function for emoji display (if system doesn't support, replace with text)
+void printEvolutionEmoji() {
+    // Try to print evolution emoji, fallback to text if not supported
+    printf("🧬");
+    fflush(stdout);
 }
 
 // Enhanced AI decision making

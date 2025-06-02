@@ -167,6 +167,113 @@ void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **tr
 // Utility functions
 void printRepeatedChar(char c, int count);
 
+
+// ===================================================================
+// EVOLUTIONARY TRAINING SYSTEM
+// ===================================================================
+
+// Individual AI in the population
+typedef struct {
+    NeuralNetwork *network;     // The neural network
+    double fitness;             // Overall fitness score
+    int wins;                   // Total wins this generation
+    int games;                  // Total games played this generation
+    double totalCredits;        // Total credits earned
+    double avgCredits;          // Average credits per game
+    double winRate;             // Win percentage
+    int generation;             // Generation this AI was born
+    int parentA, parentB;       // Parent indices (for tracking lineage)
+    char strategy[50];          // Strategy description (e.g., "Aggressive", "Tight")
+} Individual;
+
+// Tournament table for random matchups
+typedef struct {
+    int playerIndices[4];       // Indices of AIs playing at this table
+    int winner;                 // Index of winner
+    double finalCredits[4];     // Final credits for each player
+    bool completed;             // Whether this table finished
+} TournamentTable;
+
+// Evolutionary trainer state
+typedef struct {
+    Individual *population;     // Array of all AIs
+    int populationSize;         // Total population (1000)
+    int currentGeneration;      // Current generation number
+    int maxGenerations;         // Maximum generations to run
+    int gamesPerGeneration;     // Games each AI plays per generation
+    
+    // Evolution parameters
+    double selectionRate;       // Percentage to keep (0.2 = 20%)
+    double mutationRate;        // How much to mutate (0.5 = 50%)
+    double crossoverRate;       // How much crossover (0.3 = 30%)
+    double freshRate;           // How much fresh blood (0.2 = 20%)
+    
+    // Performance tracking
+    double bestFitnessEver;     // Best fitness achieved
+    double avgFitnessHistory[50]; // Average fitness per generation
+    int bestIndividualEver;     // Index of best individual
+    Individual *hallOfFame[10]; // Top 10 AIs of all time
+    
+    // Progress tracking
+    clock_t startTime;          // Training start time
+    clock_t generationStartTime; // Current generation start
+    FILE *evolutionLog;         // Detailed evolution log
+    
+    // Tournament management
+    TournamentTable *tables;    // Current tournament tables
+    int numTables;              // Number of tables (populationSize / 4)
+    
+} EvolutionaryTrainer;
+
+// ===================================================================
+// FUNCTION DECLARATIONS
+// ===================================================================
+
+// Core evolutionary functions
+EvolutionaryTrainer* createEvolutionaryTrainer(int populationSize, int maxGenerations);
+void freeEvolutionaryTrainer(EvolutionaryTrainer *trainer);
+
+// Population management
+void initializePopulation(EvolutionaryTrainer *trainer);
+void createDiversePopulation(EvolutionaryTrainer *trainer);
+
+// Tournament system
+void setupTournamentTables(EvolutionaryTrainer *trainer);
+void runTournamentGeneration(EvolutionaryTrainer *trainer);
+void runSingleTable(EvolutionaryTrainer *trainer, int tableIndex);
+
+// Fitness evaluation
+void evaluatePopulationFitness(EvolutionaryTrainer *trainer);
+double calculateIndividualFitness(Individual *individual);
+void rankPopulation(EvolutionaryTrainer *trainer);
+
+// Evolution operations
+void evolvePopulation(EvolutionaryTrainer *trainer);
+void performSelection(EvolutionaryTrainer *trainer);
+Individual* createMutatedOffspring(Individual *parent, int parentIndex, int generation);
+Individual* createCrossoverOffspring(Individual *parentA, Individual *parentB, int parentAIndex, int parentBIndex, int generation);
+Individual* createFreshIndividual(int generation);
+
+// Weight manipulation for evolution
+void mutateWeights(NeuralNetwork *nn, double mutationStrength);
+NeuralNetwork* crossoverNetworks(NeuralNetwork *parentA, NeuralNetwork *parentB);
+void addGeneticNoise(NeuralNetwork *nn, double noiseLevel);
+
+// Progress tracking and display
+void displayEvolutionProgress(EvolutionaryTrainer *trainer);
+void displayGenerationSummary(EvolutionaryTrainer *trainer);
+void displayFinalEvolutionResults(EvolutionaryTrainer *trainer);
+void saveEvolutionCheckpoint(EvolutionaryTrainer *trainer);
+void analyzePopulationDiversity(EvolutionaryTrainer *trainer);
+
+// Main evolutionary training function
+void trainEvolutionaryAI(int populationSize, int maxGenerations);
+
+// Utility functions
+void assignStrategyLabel(Individual *individual);
+double calculateNetworkSimilarity(NeuralNetwork *a, NeuralNetwork *b);
+void updateHallOfFame(EvolutionaryTrainer *trainer, Individual *candidate);
+
 // ===================================================================
 // LEGACY FUNCTIONS (DEPRECATED - kept for compatibility)
 // ===================================================================
