@@ -1,4 +1,4 @@
-// Clean Enhanced aiplayer.c - replace your existing aiplayer.c with this complete version
+
 #include "neuralnetwork.h"
 #include "player.h"
 #include "game.h"
@@ -6,103 +6,85 @@
 
 NeuralNetwork *aiNetwork = NULL;
 
-// Initialize AI with enhanced network
+// Initialize AI with priority loading system
 void initialiseAI() {
     printf("Loading AI system...\n");
     
-    // New loading priority: Evolutionary Champion > Evolved > Bootstrap > Create new
-    printf("Looking for trained AI networks...\n");
-    
-    // First try to load evolutionary champion (ultimate AI)
+    // Priority 1: Evolutionary champion (ultimate AI)
     aiNetwork = loadNetwork("poker_ai_evolved_champion.dat");
     if (aiNetwork) {
-        printf("🏆 Loaded EVOLUTIONARY CHAMPION AI!\n");
-        printf("   This AI survived natural selection among 1000+ competitors!\n");
-        printf("   Prepare for the ultimate poker challenge! 🧬\n");
+        printf("LOADED: Evolutionary Champion AI\n");
+        printf("This AI survived natural selection among 1000+ competitors!\n");
         return;
     }
     
-    // Try to load any of the evolved champions (top 10)
+    // Priority 2: Evolved champions (top 10)
     for (int i = 0; i < 10; i++) {
         char filename[100];
         sprintf(filename, "evolved_champion_%d.dat", i);
         aiNetwork = loadNetwork(filename);
         if (aiNetwork) {
-            printf("🥇 Loaded evolved champion #%d from evolutionary training\n", i);
-            printf("   This AI is one of the top 10 from population-based optimization.\n");
+            printf("LOADED: Evolved champion #%d from evolutionary training\n", i);
             return;
         }
     }
     
-    // Try to load regular evolved AI (from two-phase training)
+    // Priority 3: Regular evolved AI (from two-phase training)
     aiNetwork = loadNetwork("poker_ai_evolved.dat");
     if (aiNetwork) {
-        printf("✓ Loaded evolved AI (self-trained through reinforcement learning)\n");
-        printf("  This AI discovered its own strategy through thousands of games.\n");
+        printf("LOADED: Evolved AI (self-trained through reinforcement learning)\n");
         return;
     }
     
-    // Try to load any of the evolved backups
+    // Priority 4: Evolved backups
     for (int i = 0; i < 6; i++) {
         char filename[100];
         sprintf(filename, "evolved_ai_%d.dat", i);
         aiNetwork = loadNetwork(filename);
         if (aiNetwork) {
-            printf("✓ Loaded evolved AI backup %d\n", i);
-            printf("  This AI was trained through self-play learning.\n");
+            printf("LOADED: Evolved AI backup %d\n", i);
             return;
         }
     }
     
-    // Try to load bootstrap network
+    // Priority 5: Bootstrap network
     aiNetwork = loadNetwork("poker_ai_bootstrap.dat");
     if (aiNetwork) {
-        printf("⚠ Loaded bootstrap AI (basic rules only)\n");
-        printf("  This AI only knows basic rules - consider running training!\n");
+        printf("LOADED: Bootstrap AI (basic rules only)\n");
+        printf("Consider running training for better performance!\n");
         return;
     }
     
-    // Try legacy networks for backward compatibility
+    // Priority 6: Legacy networks
     aiNetwork = loadNetwork("poker_ai_enhanced_monitored.dat");
     if (aiNetwork) {
-        printf("⚠ Loaded legacy enhanced AI (old training method)\n");
-        printf("  Consider retraining with evolutionary approach.\n");
+        printf("LOADED: Legacy enhanced AI (old training method)\n");
         return;
     }
     
     aiNetwork = loadNetwork("poker_ai_selfplay_monitored.dat");
     if (aiNetwork) {
-        printf("⚠ Loaded legacy self-play AI (old training method)\n");
-        printf("  Consider retraining with evolutionary approach.\n");
+        printf("LOADED: Legacy self-play AI (old training method)\n");
         return;
     }
     
-    // Last resort - create fresh network
-    printf("❌ No trained AI networks found.\n");
+    // Last resort: Create fresh network
+    printf("No trained AI networks found.\n");
     printf("Creating fresh neural network with random weights...\n");
-    printf("⚠ WARNING: Untrained AI will make random decisions!\n");
-    printf("💡 TIP: Use option 2 or 3 to train the AI first.\n");
-    printf("🧬 RECOMMENDATION: Try option 3 (Evolutionary) for ultimate AI!\n");
+    printf("WARNING: Untrained AI will make random decisions!\n");
+    printf("TIP: Use option 2 or 3 to train the AI first.\n");
     aiNetwork = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
 }
 
-// ADD utility function for emoji display (if system doesn't support, replace with text)
-void printEvolutionEmoji() {
-    // Try to print evolution emoji, fallback to text if not supported
-    printf("🧬");
-    fflush(stdout);
-}
-
-// Enhanced AI decision making
+// AI decision making
 int aiMakeDecision(Player *player, Hand *communityCards, int pot, int currentBet, int numPlayers, int position) {
     if (!aiNetwork) {
         initialiseAI();
     }
     
-    // Use enhanced decision making
     int decision = makeEnhancedDecision(aiNetwork, player, communityCards, pot, currentBet, numPlayers, position);
     
-    // Debug output with more information
+    // Debug output
     printf("\nAI Debug (%s):\n", player->name);
     printf("  Fold: %.3f, Call: %.3f, Raise: %.3f\n",
            aiNetwork->outputLayer[0].value,
@@ -117,10 +99,8 @@ int aiMakeDecision(Player *player, Hand *communityCards, int pot, int currentBet
 // Enhanced prediction round with opponent tracking
 bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum, 
                       Hand* communityCards, int cardsRevealed, int startPosition, int *currentBetAmount) {
-    // Reset aggression tracking for new betting round
     resetRoundAggression();
 
-    // Initialize opponent profiles if this is the first round
     static bool initialized = false;
     if (!initialized) {
         initializeOpponentProfiles(numPlayers);
@@ -161,13 +141,11 @@ bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
 
         // Check if this is an AI player
         if (strncmp(players[currentPlayer].name, "AI ", 3) == 0) {
-            // AI decision with enhanced system
             int decision = aiMakeDecision(&players[currentPlayer], communityCards,
                                         *pot, *currentBetAmount, activePlayers, currentPlayer);
 
             printf("\n%s (AI) is thinking...\n", players[currentPlayer].name);
             
-            // Update opponent profile for this AI's action
             bool voluntaryAction = (decision != 0 || toCall == 0);
             updateOpponentProfile(currentPlayer, decision, voluntaryAction, 
                                 players[currentPlayer].currentBet, *pot);
@@ -202,9 +180,8 @@ bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
                     break;
 
                 case 2: // Raise
-                    // Smarter raise sizing based on hand strength and situation
                     int baseRaise = 2 * BIG_BLIND;
-                    if (roundNum <= 1) baseRaise = 3 * BIG_BLIND;  // Bigger pre-flop raises
+                    if (roundNum <= 1) baseRaise = 3 * BIG_BLIND;
                     
                     int raiseAmount = *currentBetAmount + baseRaise;
                     
@@ -221,7 +198,7 @@ bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
                     players[currentPlayer].currentBet = raiseAmount;
                     *pot += amountToAdd;
 
-                    playersActed = 1; // Reset since we raised
+                    playersActed = 1;
                     pause();
                     break;
             }
@@ -231,7 +208,7 @@ bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
             }
 
         } else {
-            // Human player logic
+            // Human player logic (unchanged from original)
             char handStr[100];
             printHand(handStr, players[currentPlayer].hand);
             printf("\n%s, these are your cards: %s", players[currentPlayer].name, handStr);
@@ -260,14 +237,13 @@ bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
             scanf(" %c", &input);
             clearInputBuffer();
 
-            // Process human input
             int humanDecision = -1;
             bool voluntaryAction = true;
 
             switch(input) {
                 case 'C':
                 case 'c':
-                    humanDecision = 1;  // Call or check
+                    humanDecision = 1;
                     if (toCall > 0) {
                         prediction = toCall;
                         if (prediction > players[currentPlayer].credits) {
@@ -282,7 +258,7 @@ bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
                     } else {
                         prediction = 0;
                         printf("%s checks\n", players[currentPlayer].name);
-                        voluntaryAction = false;  // Checking is free
+                        voluntaryAction = false;
                     }
 
                     players[currentPlayer].credits -= prediction;
@@ -305,8 +281,7 @@ bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
                         prediction = *currentBetAmount + 1;
                     }
 
-                    // Calculate the raise
-                    int totalBetAmount = prediction;  // Total amount player wants to bet
+                    int totalBetAmount = prediction;
                     int amountToAdd = totalBetAmount - players[currentPlayer].currentBet;
 
                     if (amountToAdd > players[currentPlayer].credits) {
@@ -346,7 +321,6 @@ bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
                     continue;
             }
             
-            // Update opponent profile for human player
             if (humanDecision >= 0) {
                 updateOpponentProfile(currentPlayer, humanDecision, voluntaryAction, 
                                     players[currentPlayer].currentBet, *pot);

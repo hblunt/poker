@@ -73,4 +73,10 @@ GameRecord playEnhancedSelfPlayGame(NeuralNetwork **networks, int numPlayers, Re
 // Enhanced reward system
 void updateEnhancedRewards(ReplayBuffer *rb, int startIndex, GameRecord *record);
 
+int debugPlayEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **networks,
+                                  ReplayBuffer *rb, GameRecord *record, int handNumber);
+void isolateAndTestComponents();
+GameRecord playEnhancedSelfPlayGameWithHandDebug(NeuralNetwork **networks, int numPlayers, ReplayBuffer *rb);
+void testBettingRoundIsolation();
+
 #endif // SELFTRAIN_H

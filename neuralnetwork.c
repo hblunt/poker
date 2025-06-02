@@ -16,7 +16,10 @@ static bool profilesInitialized = false;
 NeuralNetwork* createNetwork(int inputSize, int hiddenSize, int outputSize)
 {
     NeuralNetwork *nn = malloc(sizeof(NeuralNetwork));
-    if (!nn) perror("Could not allocate memory for neural network");
+    if (!nn) {
+        perror("Could not allocate memory for neural network");
+        return NULL;
+    }
 
     nn->inputSize = inputSize;
     nn->hiddenSize = hiddenSize;
@@ -25,28 +28,126 @@ NeuralNetwork* createNetwork(int inputSize, int hiddenSize, int outputSize)
     nn->activationFunction = ACTIVATION_SIGMOID;
 
     nn->inputLayer = calloc(inputSize, sizeof(Neuron));
-    if (!nn->inputLayer) perror("Could not allocate memory for input layer");
+    if (!nn->inputLayer) {
+        perror("Could not allocate memory for input layer");
+        free(nn);
+        return NULL;
+    }
     nn->hiddenLayer = calloc(hiddenSize, sizeof(Neuron));
-    if (!nn->hiddenLayer) perror("Could not allocate memory for hidden layer");
+    if (!nn->hiddenLayer) {
+        perror("Could not allocate memory for hidden layer");
+        free(nn->inputLayer);
+        free(nn);
+        return NULL;
+    }
     nn->outputLayer = calloc(outputSize, sizeof(Neuron));
-    if (!nn->outputLayer) perror("Could not allocate memory for output layer");
-
-    nn->weightsInputHidden = malloc(inputSize * sizeof(double*));
+    if (!nn->outputLayer) {
+        perror("Could not allocate memory for output layer");
+        free(nn->inputLayer);
+        free(nn->hiddenLayer);
+        free(nn);
+        return NULL;
+    }    nn->weightsInputHidden = malloc(inputSize * sizeof(double*));
+    if (!nn->weightsInputHidden) {
+        perror("Could not allocate memory for weightsInputHidden");
+        free(nn->inputLayer);
+        free(nn->hiddenLayer);
+        free(nn->outputLayer);
+        free(nn);
+        return NULL;
+    }
+    
     for (int i = 0; i < inputSize; i++) {
         nn->weightsInputHidden[i] = calloc(hiddenSize, sizeof(double));
-        if (!nn->weightsInputHidden[i]) perror("Could not allocate memory for weights");
+        if (!nn->weightsInputHidden[i]) {
+            perror("Could not allocate memory for weights");
+            // Cleanup previous allocations
+            for (int j = 0; j < i; j++) {
+                free(nn->weightsInputHidden[j]);
+            }
+            free(nn->weightsInputHidden);
+            free(nn->inputLayer);
+            free(nn->hiddenLayer);
+            free(nn->outputLayer);
+            free(nn);
+            return NULL;
+        }
     }
 
     nn->weightsHiddenOutput = malloc(hiddenSize * sizeof(double*));
+    if (!nn->weightsHiddenOutput) {
+        perror("Could not allocate memory for weightsHiddenOutput");
+        // Cleanup
+        for (int i = 0; i < inputSize; i++) {
+            free(nn->weightsInputHidden[i]);
+        }
+        free(nn->weightsInputHidden);
+        free(nn->inputLayer);
+        free(nn->hiddenLayer);
+        free(nn->outputLayer);
+        free(nn);
+        return NULL;
+    }
+    
     for (int i = 0; i < hiddenSize; i++) {
         nn->weightsHiddenOutput[i] = calloc(outputSize, sizeof(double));
-        if (!nn->weightsHiddenOutput[i]) perror("Could not allocate memory for weights");
+        if (!nn->weightsHiddenOutput[i]) {
+            perror("Could not allocate memory for weights");
+            // Cleanup
+            for (int j = 0; j < i; j++) {
+                free(nn->weightsHiddenOutput[j]);
+            }
+            free(nn->weightsHiddenOutput);
+            for (int j = 0; j < inputSize; j++) {
+                free(nn->weightsInputHidden[j]);
+            }
+            free(nn->weightsInputHidden);
+            free(nn->inputLayer);
+            free(nn->hiddenLayer);
+            free(nn->outputLayer);
+            free(nn);
+            return NULL;
+        }
     }
 
     nn->biasHidden = calloc(hiddenSize, sizeof(double));
-    if (!nn->biasHidden) perror("Could not allocate memory for hidden bias");
+    if (!nn->biasHidden) {
+        perror("Could not allocate memory for hidden bias");
+        // Cleanup all previous allocations
+        for (int i = 0; i < hiddenSize; i++) {
+            free(nn->weightsHiddenOutput[i]);
+        }
+        free(nn->weightsHiddenOutput);
+        for (int i = 0; i < inputSize; i++) {
+            free(nn->weightsInputHidden[i]);
+        }
+        free(nn->weightsInputHidden);
+        free(nn->inputLayer);
+        free(nn->hiddenLayer);
+        free(nn->outputLayer);
+        free(nn);
+        return NULL;
+    }
+    
     nn->biasOutput = calloc(outputSize, sizeof(double));
-    if (!nn->biasOutput) perror("Could not allocate memory for hidden bias");
+    if (!nn->biasOutput) {
+        perror("Could not allocate memory for output bias");
+        // Final cleanup
+        free(nn->biasHidden);
+        for (int i = 0; i < hiddenSize; i++) {
+            free(nn->weightsHiddenOutput[i]);
+        }
+        free(nn->weightsHiddenOutput);
+        for (int i = 0; i < inputSize; i++) {
+            free(nn->weightsInputHidden[i]);
+        }
+        free(nn->weightsInputHidden);
+        free(nn->inputLayer);
+        free(nn->hiddenLayer);
+        free(nn->outputLayer);
+        free(nn);
+        return NULL;
+    }
 
     // Initialize weights randomly
     initialiseWeights(nn);
@@ -131,6 +232,11 @@ double activateDerivative(double x, int activationType)
 // Forward prop
 void forwardpropagate(NeuralNetwork *nn, double *input)
 {
+    if (!nn || !input) {
+        printf("ERROR: NULL parameter passed to forwardpropagate\n");
+        return;
+    }
+    
     // Copy input to input layer
     for (int i = 0; i < nn->inputSize; i++)
     {
@@ -574,368 +680,6 @@ double calculateBoardTexture(Card communityCards[], int numCommunity) {
 }
 
 // ===================================================================
-// ENHANCED TRAINING DATA GENERATION
-// ===================================================================
-
-// Enhanced training data generation
-void generateEnhancedTrainingData(double **inputs, double **outputs, int numSamples) {
-    
-    printf("Generating training data with %d samples...\n", numSamples);
-    
-    for (int i = 0; i < numSamples; i++) {
-        // Create game states
-        double handStrength = (double)rand() / RAND_MAX;
-        double handPotential = (double)rand() / RAND_MAX;
-        double boardTexture = (double)rand() / RAND_MAX;
-        double potOdds = (double)rand() / RAND_MAX;
-        double position = (double)rand() / RAND_MAX;
-        double stackRatio = (double)rand() / RAND_MAX * 5.0;
-        
-        // Build enhanced input vector
-        inputs[i][0] = handStrength;
-        inputs[i][1] = handPotential;
-        inputs[i][2] = boardTexture;
-        inputs[i][3] = potOdds;
-        inputs[i][4] = stackRatio;
-        inputs[i][5] = position;
-        
-        // Fill remaining inputs
-        for (int j = 6; j < INPUT_SIZE; j++) {
-            inputs[i][j] = (double)rand() / RAND_MAX;
-        }
-        
-        // Enhanced strategy logic
-        double fold = 0.0, call = 0.0, raise = 0.0;
-        
-        double effectiveStrength = handStrength + (handPotential * 0.3);
-        
-        // Position adjustment
-        if (position > 0.7) effectiveStrength += 0.1;
-        
-        // Pot odds consideration
-        if (potOdds < 0.3 && effectiveStrength > 0.4) {
-            effectiveStrength += 0.1;
-        }
-        
-        // Board texture adjustment
-        if (boardTexture > 0.7 && effectiveStrength < 0.6) {
-            effectiveStrength -= 0.1;
-        }
-        
-        // Strategy based on effective strength
-        if (effectiveStrength < 0.2) {
-            fold = 0.8; call = 0.15; raise = 0.05;
-        } else if (effectiveStrength < 0.4) {
-            fold = 0.5; call = 0.4; raise = 0.1;
-        } else if (effectiveStrength < 0.6) {
-            fold = 0.2; call = 0.6; raise = 0.2;
-        } else if (effectiveStrength < 0.8) {
-            fold = 0.05; call = 0.3; raise = 0.65;
-        } else {
-            fold = 0.02; call = 0.18; raise = 0.8;
-        }
-        
-        // Add controlled randomness
-        double noise = ((double)rand() / RAND_MAX - 0.5) * 0.2;
-        fold += noise; call += noise; raise += noise;
-        
-        // Normalize to valid probabilities
-        double total = fold + call + raise;
-        if (total <= 0) total = 1.0;
-        
-        outputs[i][0] = fmax(0.01, fold / total);
-        outputs[i][1] = fmax(0.01, call / total);
-        outputs[i][2] = fmax(0.01, raise / total);
-    }
-    
-    printf("Enhanced training data generated successfully.\n");
-}
-
-// Enhanced basic AI training with monitoring
-void trainEnhancedBasicAIWithMonitoring() {
-    printf("\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    printf("ENHANCED AI TRAINING WITH FULL MONITORING\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    
-    // Create larger, more diverse training dataset
-    int numSamples = 3000;  // Increased for better learning
-    double **inputs = malloc(numSamples * sizeof(double*));
-    double **outputs = malloc(numSamples * sizeof(double*));
-    
-    printf("Allocating memory for %d training samples...\n", numSamples);
-    
-    for (int i = 0; i < numSamples; i++) {
-        inputs[i] = malloc(INPUT_SIZE * sizeof(double));
-        outputs[i] = malloc(OUTPUT_SIZE * sizeof(double));
-        if (!inputs[i] || !outputs[i]) {
-            printf("Error: Memory allocation failed at sample %d\n", i);
-            return;
-        }
-    }
-    
-    printf("Generating enhanced training data...\n");
-    generateEnhancedTrainingData(inputs, outputs, numSamples);
-    
-    printf("Creating neural network...\n");
-    NeuralNetwork *nn = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-    if (!nn) {
-        printf("Error: Failed to create neural network\n");
-        return;
-    }
-    
-    // Set optimal learning parameters
-    nn->learningRate = 0.01;  // Conservative learning rate for stability
-    
-    printf("Starting training with comprehensive monitoring...\n\n");
-    
-    // Train with full monitoring
-    trainWithMonitoring(nn, inputs, outputs, numSamples, TRAINING_EPOCHS);
-    
-    printf("\nTesting trained network on sample predictions...\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    
-    // Test the network on several examples
-    for (int i = 0; i < 10; i += 2) {  // Test every other sample
-        forwardpropagate(nn, inputs[i]);
-        
-        printf("Test %d:\n", i/2 + 1);
-        printf("  Input features: Hand=%.2f, Potential=%.2f, Texture=%.2f, PotOdds=%.2f\n",
-               inputs[i][0], inputs[i][1], inputs[i][2], inputs[i][3]);
-        printf("  Expected: Fold=%.2f Call=%.2f Raise=%.2f\n",
-               outputs[i][0], outputs[i][1], outputs[i][2]);
-        printf("  Predicted: Fold=%.2f Call=%.2f Raise=%.2f\n",
-               nn->outputLayer[0].value, nn->outputLayer[1].value, nn->outputLayer[2].value);
-        
-        // Determine predicted action
-        int predictedAction = 0;
-        double maxProb = nn->outputLayer[0].value;
-        for (int j = 1; j < OUTPUT_SIZE; j++) {
-            if (nn->outputLayer[j].value > maxProb) {
-                maxProb = nn->outputLayer[j].value;
-                predictedAction = j;
-            }
-        }
-        
-        int expectedAction = 0;
-        double maxExpected = outputs[i][0];
-        for (int j = 1; j < OUTPUT_SIZE; j++) {
-            if (outputs[i][j] > maxExpected) {
-                maxExpected = outputs[i][j];
-                expectedAction = j;
-            }
-        }
-        
-        printf("  Decision: %s (expected: %s) %s\n",
-               predictedAction == 0 ? "FOLD" : (predictedAction == 1 ? "CALL" : "RAISE"),
-               expectedAction == 0 ? "FOLD" : (expectedAction == 1 ? "CALL" : "RAISE"),
-               predictedAction == expectedAction ? "✓ CORRECT" : "✗ WRONG");
-        printf("\n");
-    }
-    
-    printf("Saving enhanced AI model...\n");
-    saveNetwork(nn, "poker_ai_enhanced_monitored.dat");
-    
-    printf("\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    printf("ENHANCED AI TRAINING COMPLETE!\n");
-    printf("Model saved as: poker_ai_enhanced_monitored.dat\n");
-    printf("Training log saved as: training_log.csv\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    
-    // Cleanup
-    for (int i = 0; i < numSamples; i++) {
-        free(inputs[i]);
-        free(outputs[i]);
-    }
-    free(inputs);
-    free(outputs);
-    freeNetwork(nn);
-}
-
-// Enhanced self-play training with monitoring
-void enhancedSelfPlayTrainingWithMonitoring(int numGames, int numPlayers) {
-    printf("\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("ENHANCED SELF-PLAY TRAINING WITH MONITORING\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("Games: %d | Players: %d | Enhanced Features: ON\n", numGames, numPlayers);
-    printRepeatedChar('=', 70);
-    printf("\n\n");
-    
-    // Initialize components
-    initializeOpponentProfiles(numPlayers);
-    
-    NeuralNetwork **networks = malloc(numPlayers * sizeof(NeuralNetwork*));
-    for (int i = 0; i < numPlayers; i++) {
-        networks[i] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-        addNoiseToWeights(networks[i], 0.1);  // Diversify initial strategies
-    }
-    
-    ReplayBuffer *rb = createReplayBuffer(100000);
-    
-    // Training tracking
-    int wins[MAXPLAYERS] = {0};
-    double avgCredits[MAXPLAYERS] = {0};
-    double winRateHistory[1000];  // Track win rate evolution
-    int progressCheckpoints = 20;
-    int gamesPerCheckpoint = numGames / progressCheckpoints;
-    
-    FILE *progressFile = fopen("selfplay_progress.csv", "w");
-    if (progressFile) {
-        fprintf(progressFile, "Game,AI_0_WinRate,AI_1_WinRate,AI_2_WinRate,AI_3_WinRate,AvgCredits,ExperienceBufferSize\n");
-    }
-    
-    clock_t startTime = clock();
-    
-    printf("Starting self-play training with detailed monitoring...\n\n");
-    
-    // Training loop with enhanced monitoring
-    for (int game = 0; game < numGames; game++) {
-        GameRecord record = playEnhancedSelfPlayGame(networks, numPlayers, rb);
-        
-        // Update statistics
-        wins[record.winner]++;
-        for (int i = 0; i < numPlayers; i++) {
-            avgCredits[i] = (avgCredits[i] * game + record.finalCredits[i]) / (game + 1);
-        }
-        
-        // Enhanced training frequency
-        if (rb->size > 500 && game % 3 == 0) {  // Train every 3 games
-            for (int i = 0; i < numPlayers; i++) {
-                trainFromExperience(networks[i], rb, 128);  // Larger batches
-            }
-        }
-        
-        // Detailed progress monitoring
-        if (game > 0 && (game % gamesPerCheckpoint == 0 || game == numGames - 1)) {
-            clock_t currentTime = clock();
-            double elapsed = ((double)(currentTime - startTime)) / CLOCKS_PER_SEC;
-            
-            printf("\n");
-            printRepeatedChar('-', 50);
-            printf("\n");
-            printf("PROGRESS CHECKPOINT: Game %d/%d (%.1f%%)\n", game, numGames, (game * 100.0) / numGames);
-            printRepeatedChar('-', 50);
-            printf("\n");
-            printf("Time elapsed: %.1f seconds (%.2f games/sec)\n", elapsed, game / elapsed);
-            printf("Experience buffer size: %d\n", rb->size);
-            
-            printf("\nCurrent win rates:\n");
-            for (int i = 0; i < numPlayers; i++) {
-                double winRate = (game > 0) ? (wins[i] * 100.0) / game : 0.0;
-                printf("  AI_%d: %.1f%% (%d wins) | Avg Credits: %.0f\n", 
-                       i, winRate, wins[i], avgCredits[i]);
-            }
-            
-            // Calculate strategy diversity (how different are the AIs?)
-            double diversityScore = 0.0;
-            for (int i = 0; i < numPlayers; i++) {
-                for (int j = i + 1; j < numPlayers; j++) {
-                    double winRateDiff = fabs((double)wins[i] - wins[j]) / game;
-                    diversityScore += winRateDiff;
-                }
-            }
-            diversityScore = diversityScore / ((numPlayers * (numPlayers - 1)) / 2);
-            
-            printf("Strategy diversity: %.3f (higher = more varied strategies)\n", diversityScore);
-            
-            // Log to file
-            if (progressFile) {
-                fprintf(progressFile, "%d", game);
-                for (int i = 0; i < numPlayers; i++) {
-                    double winRate = (game > 0) ? (wins[i] * 100.0) / game : 0.0;
-                    fprintf(progressFile, ",%.2f", winRate);
-                }
-                fprintf(progressFile, ",%.1f,%d\n", 
-                        (avgCredits[0] + avgCredits[1] + avgCredits[2] + avgCredits[3]) / numPlayers,
-                        rb->size);
-                fflush(progressFile);
-            }
-            
-            // Early stopping if one AI becomes too dominant
-            for (int i = 0; i < numPlayers; i++) {
-                double winRate = (double)wins[i] / game;
-                if (winRate > 0.8 && game > numGames / 4) {
-                    printf("\nEarly stopping: AI_%d became too dominant (%.1f%% win rate)\n", 
-                           i, winRate * 100);
-                    goto training_complete;
-                }
-            }
-        }
-        
-        // Simple progress indicator for intermediate games
-        if (game % (numGames / 100) == 0 && game % gamesPerCheckpoint != 0) {
-            printf(".");
-            fflush(stdout);
-        }
-    }
-    
-    training_complete:
-    
-    clock_t endTime = clock();
-    double totalTime = ((double)(endTime - startTime)) / CLOCKS_PER_SEC;
-    
-    printf("\n\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("SELF-PLAY TRAINING COMPLETE!\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("Total time: %.2f seconds (%.2f minutes)\n", totalTime, totalTime / 60.0);
-    printf("Games played: %d\n", numGames);
-    printf("Experience samples: %d\n", rb->size);
-    printf("Training efficiency: %.2f games/second\n", numGames / totalTime);
-    
-    printf("\nFINAL RESULTS:\n");
-    int bestAI = 0;
-    int maxWins = wins[0];
-    
-    for (int i = 0; i < numPlayers; i++) {
-        double winRate = (double)wins[i] / numGames;
-        printf("AI_%d: %.1f%% (%d wins) | Final Avg Credits: %.0f\n", 
-               i, winRate * 100, wins[i], avgCredits[i]);
-        
-        if (wins[i] > maxWins) {
-            maxWins = wins[i];
-            bestAI = i;
-        }
-    }
-    
-    printf("\nBest performing AI: AI_%d\n", bestAI);
-    printf("Saving best network as: poker_ai_selfplay_monitored.dat\n");
-    
-    saveNetwork(networks[bestAI], "poker_ai_selfplay_monitored.dat");
-    
-    // Save all networks as backups
-    for (int i = 0; i < numPlayers; i++) {
-        char filename[100];
-        sprintf(filename, "selfplay_ai_%d.dat", i);
-        saveNetwork(networks[i], filename);
-    }
-    
-    printf("All networks saved. Training logs: selfplay_progress.csv\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    
-    // Cleanup
-    if (progressFile) fclose(progressFile);
-    for (int i = 0; i < numPlayers; i++) {
-        freeNetwork(networks[i]);
-    }
-    free(networks);
-    free(rb->buffer);
-    free(rb);
-}
-
-// ===================================================================
 // NETWORK FILE I/O AND UTILITY FUNCTIONS
 // ===================================================================
 
@@ -1029,6 +773,117 @@ void freeNetwork(NeuralNetwork *nn) {
     free(nn);
 }
 
+void debugSelfPlayGame() {
+    printf("\n=== DEBUGGING SELF-PLAY GAME ===\n");
+    
+    // Create test networks
+    NeuralNetwork *networks[4];
+    for (int i = 0; i < 4; i++) {
+        networks[i] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+        printf("Created network %d\n", i);
+    }
+    
+    // Create replay buffer
+    ReplayBuffer *rb = createReplayBuffer(1000);
+    printf("Created replay buffer\n");
+    
+    // Test timing
+    printf("Starting game simulation...\n");
+    clock_t start = clock();
+    
+    GameRecord record = playEnhancedSelfPlayGame(networks, 4, rb);
+    
+    clock_t end = clock();
+    double gameTime = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("\n=== GAME RESULTS ===\n");
+    printf("Game time: %.4f seconds\n", gameTime);
+    printf("Winner: %d\n", record.winner);
+    printf("Total hands: %d\n", record.totalHands);
+    printf("Number of players: %d\n", record.numPlayers);
+    
+    // Check credits
+    double totalCredits = 0;
+    printf("Final credits:\n");
+    for (int i = 0; i < 4; i++) {
+        printf("  Player %d: %.1f credits\n", i, record.finalCredits[i]);
+        totalCredits += record.finalCredits[i];
+    }
+    printf("Total credits: %.1f (should be %d)\n", totalCredits, STARTING_CREDITS * 4);
+    
+    // Check for impossible values
+    bool hasNegative = false;
+    bool hasExcessive = false;
+    for (int i = 0; i < 4; i++) {
+        if (record.finalCredits[i] < 0) {
+            hasNegative = true;
+            printf("ERROR: Player %d has negative credits!\n", i);
+        }
+        if (record.finalCredits[i] > STARTING_CREDITS * 5) {
+            hasExcessive = true;
+            printf("ERROR: Player %d has excessive credits!\n", i);
+        }
+    }
+    
+    // Check experience buffer
+    printf("Experience buffer size: %d\n", rb->size);
+    if (rb->size == 0) {
+        printf("ERROR: No experiences recorded!\n");
+    }
+    
+    // Analyze decision patterns
+    if (rb->size > 0) {
+        int actionCounts[3] = {0, 0, 0}; // Fold, Call, Raise
+        for (int i = 0; i < rb->size; i++) {
+            if (rb->buffer[i].action >= 0 && rb->buffer[i].action < 3) {
+                actionCounts[rb->buffer[i].action]++;
+            }
+        }
+        printf("Decision distribution: Fold=%d, Call=%d, Raise=%d\n", 
+               actionCounts[0], actionCounts[1], actionCounts[2]);
+        
+        if (actionCounts[0] == rb->size) {
+            printf("ERROR: All decisions were folds!\n");
+        }
+    }
+    
+    // Performance analysis
+    printf("\n=== PERFORMANCE ANALYSIS ===\n");
+    if (gameTime < 0.001) {
+        printf("ERROR: Game finished too quickly (< 1ms)\n");
+    } else if (gameTime > 10.0) {
+        printf("WARNING: Game took very long (> 10s)\n");
+    } else {
+        printf("Game timing seems reasonable\n");
+    }
+    
+    if (record.totalHands == 0) {
+        printf("CRITICAL ERROR: No hands were played!\n");
+    } else if (record.totalHands > 200) {
+        printf("WARNING: Too many hands played (%d)\n", record.totalHands);
+    } else {
+        printf("Hand count seems reasonable (%d hands)\n", record.totalHands);
+    }
+    
+    if (fabs(totalCredits - (STARTING_CREDITS * 4)) > 1.0) {
+        printf("CRITICAL ERROR: Credit conservation violated!\n");
+        printf("  Expected: %d, Actual: %.1f, Difference: %.1f\n", 
+               STARTING_CREDITS * 4, totalCredits, totalCredits - (STARTING_CREDITS * 4));
+    } else {
+        printf("Credit conservation OK\n");
+    }
+    
+    // Cleanup
+    for (int i = 0; i < 4; i++) {
+        freeNetwork(networks[i]);
+    }
+    free(rb->buffer);
+    free(rb);
+    
+    printf("=== END GAME DEBUG ===\n\n");
+}
+
+
 // For debugging
 void printNetworkState(NeuralNetwork *nn) {
     printf("\nNeural Network State:\n");
@@ -1055,55 +910,215 @@ void printNetworkState(NeuralNetwork *nn) {
 }
 
 // ===================================================================
-// TRAINING MONITORING FUNCTIONS
+// SIMPLIFIED TRAINING MONITORING FUNCTIONS
 // ===================================================================
 
-// Add this helper function at the top of the file, after the includes
-void printRepeatedChar(char c, int count) {
+// Simple repeated character print (no emojis)
+void printChar(char c, int count) {
     for (int i = 0; i < count; i++) {
         printf("%c", c);
     }
 }
 
-// Initialize training statistics
-TrainingStats* initializeTrainingStats(int maxEpochs) {
+// Initialize training statistics (simplified)
+TrainingStats* initTrainingStats(int maxEpochs) {
     TrainingStats *stats = malloc(sizeof(TrainingStats));
-    if (!stats) {
-        printf("Error: Could not allocate memory for training statistics\n");
-        return NULL;
-    }
+    if (!stats) return NULL;
     
     stats->lossHistory = malloc(maxEpochs * sizeof(double));
     stats->epochNumbers = malloc(maxEpochs * sizeof(int));
     
     if (!stats->lossHistory || !stats->epochNumbers) {
-        printf("Error: Could not allocate memory for training history\n");
         free(stats);
         return NULL;
     }
     
     stats->currentEpoch = 0;
     stats->maxEpochs = maxEpochs;
-    stats->bestLoss = 1000000.0;  // Initialize to very high value
+    stats->bestLoss = 1000000.0;
     stats->bestEpoch = 0;
     stats->initialLoss = 0.0;
     stats->startTime = clock();
-    
-    // NEW: Overfitting detection
     stats->recentLossAverage = 0.0;
     stats->overfittingDetected = false;
     stats->stagnationCount = 0;
     
-    // Open log file for training progress
     stats->logFile = fopen("training_log.csv", "w");
     if (stats->logFile) {
         fprintf(stats->logFile, "Epoch,Loss,Time_Elapsed,Learning_Rate\n");
     }
     
-    printf("Training monitoring initialized for %d epochs\n", maxEpochs);
-    printf("Progress will be saved to 'training_log.csv'\n\n");
-    
     return stats;
+}
+
+// Update training statistics
+void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **inputs, 
+                        double **targets, int numSamples, double learningRate) {
+    if (!stats || stats->currentEpoch >= stats->maxEpochs) return;
+    
+    double currentLoss = calculateLoss(nn, inputs, targets, numSamples);
+    
+    stats->lossHistory[stats->currentEpoch] = currentLoss;
+    stats->epochNumbers[stats->currentEpoch] = stats->currentEpoch;
+    
+    if (currentLoss < stats->bestLoss) {
+        stats->bestLoss = currentLoss;
+        stats->bestEpoch = stats->currentEpoch;
+        stats->stagnationCount = 0;
+    } else {
+        stats->stagnationCount++;
+    }
+    
+    if (stats->currentEpoch == 0) {
+        stats->initialLoss = currentLoss;
+    }
+    
+    // Overfitting detection
+    if (stats->currentEpoch >= 50) {
+        double recentSum = 0.0;
+        for (int i = stats->currentEpoch - 49; i <= stats->currentEpoch; i++) {
+            recentSum += stats->lossHistory[i];
+        }
+        stats->recentLossAverage = recentSum / 50.0;
+        
+        if (stats->recentLossAverage > stats->bestLoss * 1.5 && stats->stagnationCount > 100) {
+            stats->overfittingDetected = true;
+        }
+    }
+    
+    // Log to file
+    if (stats->logFile) {
+        clock_t currentTime = clock();
+        double elapsedSeconds = ((double)(currentTime - stats->startTime)) / CLOCKS_PER_SEC;
+        fprintf(stats->logFile, "%d,%.6f,%.2f,%.6f\n", 
+                stats->currentEpoch, currentLoss, elapsedSeconds, learningRate);
+        fflush(stats->logFile);
+    }
+    
+    stats->currentEpoch++;
+}
+
+// Simplified training progress display
+void displayTrainingProgress(TrainingStats *stats) {
+    if (!stats || stats->currentEpoch == 0) return;
+    
+    int epoch = stats->currentEpoch - 1;
+    double currentLoss = stats->lossHistory[epoch];
+    
+    // Show progress every 100 epochs
+    if (epoch % 100 == 0 || epoch == stats->maxEpochs - 1) {
+        printf("Epoch %4d/%d | Loss: %.6f", epoch, stats->maxEpochs - 1, currentLoss);
+        
+        if (epoch > 0) {
+            double lossChange = currentLoss - stats->lossHistory[epoch - 1];
+            if (lossChange < -0.001) {
+                printf(" (improving)");
+            } else if (lossChange > 0.001) {
+                printf(" (degrading)");
+            }
+        }
+        
+        if (epoch == stats->bestEpoch) {
+            printf(" BEST");
+        }
+        
+        if (stats->overfittingDetected) {
+            printf(" OVERFITTING");
+        }
+        
+        printf("\n");
+    }
+    
+    // Progress bar every 10%
+    if (epoch % (stats->maxEpochs / 10) == 0) {
+        int progress = (epoch * 50) / stats->maxEpochs;
+        printf("Progress: [");
+        for (int i = 0; i < 50; i++) {
+            printf(i < progress ? "#" : ".");
+        }
+        printf("] %d%%\n", (epoch * 100) / stats->maxEpochs);
+    }
+}
+
+// Simplified training summary
+void displayTrainingSummary(TrainingStats *stats) {
+    if (!stats) return;
+    
+    clock_t endTime = clock();
+    double totalTime = ((double)(endTime - stats->startTime)) / CLOCKS_PER_SEC;
+    
+    printf("\n");
+    printChar('=', 60);
+    printf("\nTRAINING COMPLETE\n");
+    printChar('=', 60);
+    printf("\n");
+    
+    printf("Summary:\n");
+    printf("  Total Epochs: %d\n", stats->currentEpoch);
+    printf("  Training Time: %.2f minutes\n", totalTime / 60.0);
+    printf("  Initial Loss: %.6f\n", stats->initialLoss);
+    printf("  Final Loss: %.6f\n", stats->lossHistory[stats->currentEpoch - 1]);
+    printf("  Best Loss: %.6f (Epoch %d)\n", stats->bestLoss, stats->bestEpoch);
+    
+    double improvement = ((stats->initialLoss - stats->bestLoss) / stats->initialLoss) * 100;
+    printf("  Improvement: %.1f%% reduction\n", improvement);
+    
+    if (stats->overfittingDetected) {
+        printf("  Status: Overfitting detected\n");
+    } else if (stats->stagnationCount > 50) {
+        printf("  Status: Training plateaued\n");
+    } else {
+        printf("  Status: Normal completion\n");
+    }
+    
+    printf("\nLog saved to: training_log.csv\n");
+    printChar('=', 60);
+    printf("\n");
+}
+
+// Core monitored training function (simplified)
+void trainWithMonitoring(NeuralNetwork *nn, double **inputs, double **outputs, 
+                        int numSamples, int epochs) {
+    printf("Training: %d samples, %d epochs, LR: %.4f\n", 
+           numSamples, epochs, nn->learningRate);
+    
+    TrainingStats *stats = initTrainingStats(epochs);
+    if (!stats) {
+        printf("Error: Could not initialize training monitoring\n");
+        return;
+    }
+    
+    // Training loop
+    for (int epoch = 0; epoch < epochs; epoch++) {
+        // Train on all samples
+        for (int sample = 0; sample < numSamples; sample++) {
+            forwardpropagate(nn, inputs[sample]);
+            backpropagate(nn, outputs[sample]);
+            updateWeights(nn);
+        }
+        
+        updateTrainingStats(stats, nn, inputs, outputs, numSamples, nn->learningRate);
+        displayTrainingProgress(stats);
+        
+        // Early stopping
+        if (stats->lossHistory[epoch] < 0.0001) {
+            printf("\nEarly stopping: Loss became very small\n");
+            break;
+        }
+        
+        if (stats->overfittingDetected) {
+            printf("\nEarly stopping: Overfitting detected\n");
+            break;
+        }
+    }
+    
+    displayTrainingSummary(stats);
+    
+    // Cleanup
+    if (stats->logFile) fclose(stats->logFile);
+    free(stats->lossHistory);
+    free(stats->epochNumbers);
+    free(stats);
 }
 
 // Calculate mean squared error loss
@@ -1159,475 +1174,93 @@ double calculateAccuracy(NeuralNetwork *nn, double **inputs, double **targets, i
     return (double)correctPredictions / numSamples;
 }
 
-// Update training statistics for current epoch
-void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **inputs, 
-                        double **targets, int numSamples, double learningRate) {
-    if (!stats || stats->currentEpoch >= stats->maxEpochs) return;
-    
-    // Calculate current loss
-    double currentLoss = calculateLoss(nn, inputs, targets, numSamples);
-    
-    // Store in history
-    stats->lossHistory[stats->currentEpoch] = currentLoss;
-    stats->epochNumbers[stats->currentEpoch] = stats->currentEpoch;
-    
-    // Track best performance
-    if (currentLoss < stats->bestLoss) {
-        stats->bestLoss = currentLoss;
-        stats->bestEpoch = stats->currentEpoch;
-        stats->stagnationCount = 0;  // Reset stagnation counter
-    } else {
-        stats->stagnationCount++;
-    }
-    
-    // Set initial loss on first epoch
-    if (stats->currentEpoch == 0) {
-        stats->initialLoss = currentLoss;
-    }
-    
-    // NEW: Overfitting detection
-    if (stats->currentEpoch >= 50) {
-        // Calculate recent average loss (last 50 epochs)
-        double recentSum = 0.0;
-        for (int i = stats->currentEpoch - 49; i <= stats->currentEpoch; i++) {
-            recentSum += stats->lossHistory[i];
-        }
-        stats->recentLossAverage = recentSum / 50.0;
-        
-        // Detect overfitting: recent average higher than best loss by significant margin
-        if (stats->recentLossAverage > stats->bestLoss * 1.5 && stats->stagnationCount > 100) {
-            stats->overfittingDetected = true;
-        }
-    }
-    
-    // Calculate elapsed time
-    clock_t currentTime = clock();
-    double elapsedSeconds = ((double)(currentTime - stats->startTime)) / CLOCKS_PER_SEC;
-    
-    // Log to file
-    if (stats->logFile) {
-        fprintf(stats->logFile, "%d,%.6f,%.2f,%.6f\n", 
-                stats->currentEpoch, currentLoss, elapsedSeconds, learningRate);
-        fflush(stats->logFile);  // Ensure data is written immediately
-    }
-    
-    stats->currentEpoch++;
-}
-
-// Display training progress
-void displayTrainingProgress(TrainingStats *stats, bool verbose) {
-    if (!stats || stats->currentEpoch == 0) return;
-    
-    int epoch = stats->currentEpoch - 1;  // Last completed epoch
-    double currentLoss = stats->lossHistory[epoch];
-    
-    // Calculate elapsed time
-    clock_t currentTime = clock();
-    double elapsedSeconds = ((double)(currentTime - stats->startTime)) / CLOCKS_PER_SEC;
-    
-    // Show progress every 100 epochs or on last epoch
-    if (epoch % 100 == 0 || epoch == stats->maxEpochs - 1) {
-        printf("Epoch %4d/%d | Loss: %.6f | LR: %.6f", 
-               epoch, stats->maxEpochs - 1, currentLoss, 0.01);  // Assuming default LR
-        
-        // Show improvement indicators
-        if (epoch > 0) {
-            double lossChange = currentLoss - stats->lossHistory[epoch - 1];
-            if (lossChange < -0.001) {
-                printf(" ↓");  // Loss decreased significantly
-            } else if (lossChange > 0.001) {
-                printf(" ↑");  // Loss increased significantly
-            } else {
-                printf(" →");  // Loss roughly stable
-            }
-        }
-        
-        // Show if this is the best so far
-        if (epoch == stats->bestEpoch) {
-            printf(" ★ BEST");
-        }
-        
-        // Show overfitting warning
-        if (stats->overfittingDetected) {
-            printf(" ⚠ OVERFITTING");
-        }
-        
-        printf("\n");
-    }
-    
-    // Progress bar every 10% of training
-    if (epoch % (stats->maxEpochs / 10) == 0 && !verbose) {
-        int progress = (epoch * 50) / stats->maxEpochs;  // 50 chars wide
-        printf("Progress: [");
-        for (int i = 0; i < 50; i++) {
-            printf(i < progress ? "█" : "░");
-        }
-        printf("] %d%% (Loss: %.4f)\n", (epoch * 100) / stats->maxEpochs, currentLoss);
-    }
-}
-
-
-// Calculate network confidence/decision distribution
-void analyzeNetworkConfidence(NeuralNetwork *nn, double **inputs, int numSamples) {
-    double totalConfidence = 0.0;
-    int decisions[3] = {0}; // Count of fold, call, raise decisions
-    double avgOutputs[3] = {0.0, 0.0, 0.0};
-    
-    printf("\nNETWORK CONFIDENCE ANALYSIS:\n");
-    printRepeatedChar('-', 40);
-    printf("\n");
-    
-    for (int i = 0; i < numSamples; i++) {
-        forwardpropagate(nn, inputs[i]);
-        
-        // Find highest probability decision
-        int decision = 0;
-        double maxProb = nn->outputLayer[0].value;
-        for (int j = 1; j < 3; j++) {
-            if (nn->outputLayer[j].value > maxProb) {
-                maxProb = nn->outputLayer[j].value;
-                decision = j;
-            }
-        }
-        
-        decisions[decision]++;
-        totalConfidence += maxProb;
-        
-        // Accumulate average outputs
-        for (int j = 0; j < 3; j++) {
-            avgOutputs[j] += nn->outputLayer[j].value;
-        }
-    }
-    
-    // Calculate averages
-    totalConfidence /= numSamples;
-    for (int i = 0; i < 3; i++) {
-        avgOutputs[i] /= numSamples;
-    }
-    
-    printf("Average Confidence: %.3f (%.1f%%)\n", totalConfidence, totalConfidence * 100);
-    printf("Decision Distribution:\n");
-    printf("  Fold:  %d samples (%.1f%%) | Avg Prob: %.3f\n", 
-           decisions[0], (decisions[0] * 100.0) / numSamples, avgOutputs[0]);
-    printf("  Call:  %d samples (%.1f%%) | Avg Prob: %.3f\n", 
-           decisions[1], (decisions[1] * 100.0) / numSamples, avgOutputs[1]);
-    printf("  Raise: %d samples (%.1f%%) | Avg Prob: %.3f\n", 
-           decisions[2], (decisions[2] * 100.0) / numSamples, avgOutputs[2]);
-    
-    // Analyze decision balance
-    double maxDecisionPct = fmax(fmax(decisions[0], decisions[1]), decisions[2]) * 100.0 / numSamples;
-    double minDecisionPct = fmin(fmin(decisions[0], decisions[1]), decisions[2]) * 100.0 / numSamples;
-    
-    printf("\nStrategy Balance:\n");
-    if (maxDecisionPct > 70) {
-        printf("⚠ UNBALANCED: Too focused on one action (%.1f%% vs %.1f%%)\n", maxDecisionPct, minDecisionPct);
-    } else if (maxDecisionPct < 45) {
-        printf("✓ BALANCED: Good action diversity\n");
-    } else {
-        printf("→ MODERATE: Reasonable action balance\n");
-    }
-}
-
-
-// Display final training summary
-void displayTrainingSummary(TrainingStats *stats, NeuralNetwork *nn, double **inputs, int numSamples) {
-    if (!stats) return;
-    
-    clock_t endTime = clock();
-    double totalTime = ((double)(endTime - stats->startTime)) / CLOCKS_PER_SEC;
-    
-    printf("\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("TRAINING COMPLETED!\n");
-    printf("\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    
-    // Basic training info
-    printf("TRAINING SUMMARY:\n");
-    printf("Total Epochs:     %d\n", stats->currentEpoch);
-    printf("Total Time:       %.2f seconds (%.2f minutes)\n", totalTime, totalTime / 60.0);
-    printf("Time per Epoch:   %.4f seconds\n", totalTime / stats->currentEpoch);
-    
-    // Loss progression analysis
-    printf("\nLOSS PROGRESSION:\n");
-    printf("Initial Loss:     %.6f\n", stats->initialLoss);
-    printf("Final Loss:       %.6f\n", stats->lossHistory[stats->currentEpoch - 1]);
-    printf("Best Loss:        %.6f (Epoch %d)\n", stats->bestLoss, stats->bestEpoch);
-    printf("Loss Improvement: %.6f (%.1f%% reduction)\n", 
-           stats->initialLoss - stats->bestLoss,
-           ((stats->initialLoss - stats->bestLoss) / stats->initialLoss) * 100);
-    
-    // Overfitting detection results
-    printf("\nOVERFITTING ANALYSIS:\n");
-    if (stats->overfittingDetected) {
-        printf("⚠ OVERFITTING DETECTED at epoch %d\n", stats->bestEpoch + stats->stagnationCount);
-        printf("  Recent loss average: %.6f vs Best loss: %.6f\n", 
-               stats->recentLossAverage, stats->bestLoss);
-        printf("  Stagnation period: %d epochs\n", stats->stagnationCount);
-    } else if (stats->stagnationCount > 50) {
-        printf("→ TRAINING PLATEAUED after epoch %d (%d epochs without improvement)\n", 
-               stats->bestEpoch, stats->stagnationCount);
-    } else {
-        printf("✓ NO OVERFITTING DETECTED - Training progressed normally\n");
-    }
-    
-    // Comparative analysis (before/after)
-    printf("\nCOMPARATIVE ANALYSIS:\n");
-    double improvementRatio = stats->initialLoss / stats->bestLoss;
-    if (improvementRatio > 5.0) {
-        printf("✓ EXCELLENT: %.1fx improvement - Strong learning occurred\n", improvementRatio);
-    } else if (improvementRatio > 2.0) {
-        printf("✓ GOOD: %.1fx improvement - Solid learning progress\n", improvementRatio);
-    } else if (improvementRatio > 1.2) {
-        printf("→ MODERATE: %.1fx improvement - Some learning occurred\n", improvementRatio);
-    } else {
-        printf("⚠ POOR: %.1fx improvement - Limited learning\n", improvementRatio);
-    }
-    
-    // Network confidence and decision distribution
-    if (nn && inputs) {
-        analyzeNetworkConfidence(nn, inputs, fmin(numSamples, 1000));  // Analyze up to 1000 samples
-    }
-    
-    printf("\nDetailed log saved to: training_log.csv\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-}
-
-// Enhanced training function with monitoring
-void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **trainingOutputs, 
-                        int numSamples, int epochs) {
-    printf("Starting enhanced training with monitoring...\n");
-    printf("Samples: %d | Epochs: %d | Learning Rate: %.4f\n", 
-           numSamples, epochs, nn->learningRate);
-    
-    // Initialize training statistics
-    TrainingStats *stats = initializeTrainingStats(epochs);
-    if (!stats) {
-        printf("Error: Could not initialize training monitoring\n");
-        return;
-    }
-    
-    // Training loop with enhanced monitoring
-    for (int epoch = 0; epoch < epochs; epoch++) {
-        // Train on all samples
-        for (int sample = 0; sample < numSamples; sample++) {
-            forwardpropagate(nn, trainingInputs[sample]);
-            backpropagate(nn, trainingOutputs[sample]);
-            updateWeights(nn);
-        }
-        
-        // Update statistics and display progress
-        updateTrainingStats(stats, nn, trainingInputs, trainingOutputs, numSamples, nn->learningRate);
-        
-        // Display progress every 100 epochs
-        displayTrainingProgress(stats, false);
-        
-        // Early stopping if loss becomes very small
-        if (stats->lossHistory[epoch] < 0.0001) {
-            printf("\nEarly stopping: Loss became very small (%.6f)\n", stats->lossHistory[epoch]);
-            break;
-        }
-        
-        // Early stopping for overfitting
-        if (stats->overfittingDetected) {
-            printf("\nEarly stopping: Overfitting detected\n");
-            break;
-        }
-        
-        // Adaptive learning rate (optional)
-        if (epoch > 100 && epoch % 200 == 0) {
-            if (stats->stagnationCount > 150) {
-                nn->learningRate *= 0.8;
-                printf("Learning rate reduced to %.6f (learning stagnated)\n", nn->learningRate);
-            }
-        }
-    }
-    
-    // Display enhanced final summary
-    displayTrainingSummary(stats, nn, trainingInputs, numSamples);
-    
-    // Cleanup
-    if (stats->logFile) {
-        fclose(stats->logFile);
-    }
-    free(stats->lossHistory);
-    free(stats->epochNumbers);
-    free(stats);
-}
-
 // ===================================================================
-// MINIMAL BOOTSTRAP TRAINING (PHASE 1)
+// SIMPLIFIED BOOTSTRAP TRAINING (RENAMED)
 // ===================================================================
 
-// Generate minimal bootstrap data - just basic rules to prevent crashes
-void generateMinimalBootstrap(double **inputs, double **outputs, int numSamples) {
-    printf("Generating minimal bootstrap data (%d samples)...\n", numSamples);
+// Generate basic bootstrap data (renamed and simplified)
+void generateBootstrapData(double **inputs, double **outputs, int numSamples) {
+    printf("Generating bootstrap data (%d samples)...\n", numSamples);
     
     for (int i = 0; i < numSamples; i++) {
-        // Create basic game scenarios
         double handStrength = (double)rand() / RAND_MAX;
         double stackRatio = (double)rand() / RAND_MAX * 5.0;
         double currentBet = (double)rand() / RAND_MAX;
         double playerBet = (double)rand() / RAND_MAX;
         
-        // Fill inputs with reasonable values (20 features total)
-        inputs[i][0] = handStrength;  // Hand strength
-        inputs[i][1] = 0.5;          // Hand potential
-        inputs[i][2] = 0.5;          // Board texture
-        inputs[i][3] = 0.5;          // Pot odds
-        inputs[i][4] = stackRatio;   // Stack to pot ratio
+        // Fill inputs (20 features)
+        inputs[i][0] = handStrength;
+        inputs[i][1] = 0.5;  // Hand potential
+        inputs[i][2] = 0.5;  // Board texture
+        inputs[i][3] = 0.5;  // Pot odds
+        inputs[i][4] = stackRatio;
         inputs[i][5] = (double)rand() / RAND_MAX;  // Position
-        inputs[i][6] = 0.5;          // Number of players (normalized)
-        inputs[i][7] = currentBet;   // Current bet level
-        inputs[i][8] = playerBet;    // Player's bet ratio
-        inputs[i][9] = (double)rand() / RAND_MAX;   // First hole card
-        inputs[i][10] = (double)rand() / RAND_MAX;  // Second hole card
-        inputs[i][11] = (double)rand() / RAND_MAX;  // Cards suited
-        inputs[i][12] = (double)rand() / RAND_MAX;  // Game phase
-        inputs[i][13] = 0.5;         // Stack committed
-        inputs[i][14] = 0.5;         // Avg opponent aggression
-        inputs[i][15] = 0.5;         // Avg opponent tightness
-        inputs[i][16] = 0.5;         // Avg opponent fold rate
-        inputs[i][17] = 0.3;         // Recent opponent aggression
-        inputs[i][18] = (double)rand() / RAND_MAX;  // Pair in hand
-        inputs[i][19] = (double)rand() / RAND_MAX;  // High card strength
+        inputs[i][6] = 0.5;  // Number of players
+        inputs[i][7] = currentBet;
+        inputs[i][8] = playerBet;
+        for (int j = 9; j < INPUT_SIZE; j++) {
+            inputs[i][j] = (double)rand() / RAND_MAX;
+        }
         
-        // MINIMAL STRATEGY - Only basic rules to prevent crashes/illegal moves
-        double fold = 0.33, call = 0.33, raise = 0.33;  // Start neutral
+        // Basic strategy rules
+        double fold = 0.33, call = 0.33, raise = 0.33;
         
-        // Rule 1: Don't go all-in with terrible hands (prevents instant losses)
+        // Rule 1: Don't go all-in with terrible hands
         if (handStrength < 0.1 && currentBet > 0.8) {
             fold = 0.9; call = 0.08; raise = 0.02;
         }
         
         // Rule 2: Don't fold when you can check for free
-        if (currentBet == 0.0) {  // Can check for free
-            fold = 0.05; call = 0.7; raise = 0.25;  // Heavily favor checking/betting
+        if (currentBet == 0.0) {
+            fold = 0.05; call = 0.7; raise = 0.25;
         }
         
-        // Rule 3: With very strong hands, don't fold (basic hand ranking)
+        // Rule 3: With very strong hands, don't fold
         if (handStrength > 0.8) {
             fold = 0.05; call = 0.4; raise = 0.55;
         }
         
-        // Rule 4: Don't bet more than you have (stack ratio check)
-        if (stackRatio < 0.2 && currentBet > 0.5) {  // Low chips, high bet
-            fold = 0.6; call = 0.35; raise = 0.05;  // Be more conservative
+        // Rule 4: Be conservative with low chips
+        if (stackRatio < 0.2 && currentBet > 0.5) {
+            fold = 0.6; call = 0.35; raise = 0.05;
         }
         
-        // Normalize to valid probabilities
+        // Normalize
         double total = fold + call + raise;
         outputs[i][0] = fold / total;
         outputs[i][1] = call / total;
         outputs[i][2] = raise / total;
     }
-    
-    printf("Minimal bootstrap data generated - basic rules only.\n");
 }
 
-// Phase 1: Train minimal bootstrap (just enough to make legal moves)
-// Phase 1: Train minimal bootstrap with monitoring
-NeuralNetwork* trainMinimalBootstrap() {
+// Bootstrap training (renamed and simplified)
+NeuralNetwork* trainBootstrap() {
     printf("\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    printf("PHASE 1: MINIMAL BOOTSTRAP TRAINING\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    printf("Teaching basic rules to prevent crashes and illegal moves...\n");
-    printf("This is NOT strategy - just survival basics!\n\n");
+    printChar('=', 50);
+    printf("\nPHASE 1: BOOTSTRAP TRAINING\n");
+    printChar('=', 50);
+    printf("\nTeaching basic rules to prevent crashes...\n");
     
-    // Small dataset - just enough to learn basic rules
-    int numSamples = 100;
+    int numSamples = 500;
     double **inputs = malloc(numSamples * sizeof(double*));
     double **outputs = malloc(numSamples * sizeof(double*));
-    
-    printf("Allocating memory for %d bootstrap samples...\n", numSamples);
     
     for (int i = 0; i < numSamples; i++) {
         inputs[i] = malloc(INPUT_SIZE * sizeof(double));
         outputs[i] = malloc(OUTPUT_SIZE * sizeof(double));
-        if (!inputs[i] || !outputs[i]) {
-            printf("Error: Memory allocation failed at sample %d\n", i);
-            return NULL;
-        }
     }
     
-    printf("Generating minimal bootstrap data...\n");
-    generateMinimalBootstrap(inputs, outputs, numSamples);
+    generateBootstrapData(inputs, outputs, numSamples);
     
-    printf("Creating fresh neural network...\n");
     NeuralNetwork *nn = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-    if (!nn) {
-        printf("Error: Failed to create neural network\n");
-        return NULL;
-    }
+    nn->learningRate = 0.05;
     
-    nn->learningRate = 0.05;  // Higher learning rate for quick bootstrap
+    trainWithMonitoring(nn, inputs, outputs, numSamples, 200);
     
-    // Use full monitoring system for bootstrap training
-    int bootstrapEpochs = 200;
-    printf("Starting bootstrap training with monitoring (%d epochs)...\n\n", bootstrapEpochs);
-    
-    // Train with full monitoring system
-    trainWithMonitoring(nn, inputs, outputs, numSamples, bootstrapEpochs);
-    
-    printf("\nTesting bootstrap network...\n");
-    printRepeatedChar('=', 40);
-    printf("\n");
-    
-    // Test a few examples
-    for (int i = 0; i < 3; i++) {
-        forwardpropagate(nn, inputs[i]);
-        printf("Test %d:\n", i+1);
-        printf("  Expected: Fold=%.2f Call=%.2f Raise=%.2f\n",
-               outputs[i][0], outputs[i][1], outputs[i][2]);
-        printf("  Predicted: Fold=%.2f Call=%.2f Raise=%.2f\n",
-               nn->outputLayer[0].value, nn->outputLayer[1].value, nn->outputLayer[2].value);
-        
-        // Determine actions
-        int predictedAction = 0;
-        double maxProb = nn->outputLayer[0].value;
-        for (int j = 1; j < OUTPUT_SIZE; j++) {
-            if (nn->outputLayer[j].value > maxProb) {
-                maxProb = nn->outputLayer[j].value;
-                predictedAction = j;
-            }
-        }
-        
-        int expectedAction = 0;
-        double maxExpected = outputs[i][0];
-        for (int j = 1; j < OUTPUT_SIZE; j++) {
-            if (outputs[i][j] > maxExpected) {
-                maxExpected = outputs[i][j];
-                expectedAction = j;
-            }
-        }
-        
-        printf("  Decision: %s (expected: %s) %s\n",
-               predictedAction == 0 ? "FOLD" : (predictedAction == 1 ? "CALL" : "RAISE"),
-               expectedAction == 0 ? "FOLD" : (expectedAction == 1 ? "CALL" : "RAISE"),
-               predictedAction == expectedAction ? "✓ CORRECT" : "✗ WRONG");
-        printf("\n");
-    }
-    
-    printf("Saving bootstrap network...\n");
     saveNetwork(nn, "poker_ai_bootstrap.dat");
-    
-    printf("\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
-    printf("BOOTSTRAP COMPLETE!\n");
-    printf("Network learned basic rules - ready for self-play learning.\n");
     printf("Bootstrap saved as: poker_ai_bootstrap.dat\n");
-    printf("Bootstrap training log: training_log.csv\n");
-    printRepeatedChar('=', 60);
-    printf("\n");
     
-    // Cleanup training data
+    // Cleanup
     for (int i = 0; i < numSamples; i++) {
         free(inputs[i]);
         free(outputs[i]);
@@ -1635,43 +1268,33 @@ NeuralNetwork* trainMinimalBootstrap() {
     free(inputs);
     free(outputs);
     
-    return nn;  // Return the bootstrap network
+    return nn;
 }
 
 // Phase 2: Pure self-play learning starting from bootstrap
-void pureReinforcementLearning(int numGames, int numPlayers) {
+void trainSelfPlay(int numGames, int numPlayers) {
     printf("\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("PHASE 2: PURE REINFORCEMENT LEARNING\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("Starting self-play from bootstrap network...\n");
-    printf("The AI will now discover its own strategy through experience!\n");
-    printf("Bootstrap knowledge may be completely overwritten.\n");
-    printRepeatedChar('=', 70);
-    printf("\n\n");
+    printChar('=', 50);
+    printf("\nPHASE 2: SELF-PLAY LEARNING\n");
+    printChar('=', 50);
+    printf("\nStarting self-play from bootstrap...\n");
     
-    // Initialize opponent profiles
     initializeOpponentProfiles(numPlayers);
     
-    // Create networks starting from bootstrap
     NeuralNetwork **networks = malloc(numPlayers * sizeof(NeuralNetwork*));
-    
-    // Try to load bootstrap network first
     NeuralNetwork *bootstrap = loadNetwork("poker_ai_bootstrap.dat");
+    
     if (!bootstrap) {
-        printf("No bootstrap found - creating fresh networks...\n");
+        printf("No bootstrap found - creating fresh networks\n");
         bootstrap = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
     }
     
-    // Create diverse AIs starting from bootstrap
+    // Create diverse AIs from bootstrap
     for (int i = 0; i < numPlayers; i++) {
         networks[i] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
         
-        // Copy bootstrap weights to each network
         if (bootstrap) {
-            // Copy all weights from bootstrap
+            // Copy bootstrap weights
             for (int inp = 0; inp < INPUT_SIZE; inp++) {
                 for (int hid = 0; hid < HIDDEN_SIZE; hid++) {
                     networks[i]->weightsInputHidden[inp][hid] = bootstrap->weightsInputHidden[inp][hid];
@@ -1688,138 +1311,53 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
             }
         }
         
-        // Add noise for diversity (each AI will evolve differently)
-        addNoiseToWeights(networks[i], 0.15);
-        printf("AI_%d initialized from bootstrap + noise\n", i);
+        addGeneticNoise(networks[i], 0.15);
+        printf("AI_%d initialized\n", i);
     }
     
     ReplayBuffer *rb = createReplayBuffer(100000);
-    
-    // Initialize training monitoring for the best AI (AI_0)
-    int maxTrainingEpochs = numGames / 3;  // One training epoch per 3 games
-    TrainingStats *mainStats = initializeTrainingStats(maxTrainingEpochs);
-    
-    // Validation set for loss calculation
-    int validationSize = 500;
-    double **validationInputs = malloc(validationSize * sizeof(double*));
-    double **validationOutputs = malloc(validationSize * sizeof(double*));
-    for (int i = 0; i < validationSize; i++) {
-        validationInputs[i] = malloc(INPUT_SIZE * sizeof(double));
-        validationOutputs[i] = malloc(OUTPUT_SIZE * sizeof(double));
-    }
-    
-    // Game tracking
     int wins[MAXPLAYERS] = {0};
     double avgCredits[MAXPLAYERS] = {0};
-    int progressCheckpoints = 20;
-    int gamesPerCheckpoint = numGames / progressCheckpoints;
     
     FILE *progressFile = fopen("selfplay_progress.csv", "w");
     if (progressFile) {
-        fprintf(progressFile, "Game,AI_0_WinRate,AI_1_WinRate,AI_2_WinRate,AI_3_WinRate,AvgCredits,ExperienceBufferSize\n");
+        fprintf(progressFile, "Game,AI_0_WinRate,AI_1_WinRate,AI_2_WinRate,AI_3_WinRate\n");
     }
     
     clock_t startTime = clock();
-    int trainingEpochCount = 0;
     
-    printf("Starting pure self-play learning...\n");
-    printf("Each AI will develop its own strategy through experience!\n\n");
-    
-    // Main self-play training loop
+    // Main self-play loop
     for (int game = 0; game < numGames; game++) {
         GameRecord record = playEnhancedSelfPlayGame(networks, numPlayers, rb);
         
-        // Update game statistics
         wins[record.winner]++;
         for (int i = 0; i < numPlayers; i++) {
             avgCredits[i] = (avgCredits[i] * game + record.finalCredits[i]) / (game + 1);
         }
         
-        // Neural network training from experience
+        // Training from experience
         if (rb->size > 500 && game % 3 == 0) {
-            trainingEpochCount++;
-            
-            // Create validation set from recent experiences
-            if (rb->size >= validationSize) {
-                for (int i = 0; i < validationSize; i++) {
-                    int idx = (rb->size - validationSize + i) % rb->capacity;
-                    memcpy(validationInputs[i], rb->buffer[idx].gameState, INPUT_SIZE * sizeof(double));
-                    
-                    // Create target output based on experience
-                    for (int j = 0; j < OUTPUT_SIZE; j++) {
-                        validationOutputs[i][j] = 0.33;  // Start neutral
-                    }
-                    
-                    // Adjust based on reward
-                    if (rb->buffer[idx].reward > 0) {
-                        validationOutputs[i][rb->buffer[idx].action] = 0.7;
-                        for (int j = 0; j < OUTPUT_SIZE; j++) {
-                            if (j != rb->buffer[idx].action) {
-                                validationOutputs[i][j] = 0.15;
-                            }
-                        }
-                    } else if (rb->buffer[idx].reward < -0.5) {
-                        validationOutputs[i][rb->buffer[idx].action] = 0.1;
-                        for (int j = 0; j < OUTPUT_SIZE; j++) {
-                            if (j != rb->buffer[idx].action) {
-                                validationOutputs[i][j] = 0.45;
-                            }
-                        }
-                    }
-                    
-                    // Normalize
-                    double sum = 0;
-                    for (int j = 0; j < OUTPUT_SIZE; j++) {
-                        sum += validationOutputs[i][j];
-                    }
-                    if (sum > 0) {
-                        for (int j = 0; j < OUTPUT_SIZE; j++) {
-                            validationOutputs[i][j] /= sum;
-                        }
-                    }
-                }
-                
-                // Train all AIs from experience
-                for (int i = 0; i < numPlayers; i++) {
-                    trainFromExperience(networks[i], rb, 128);
-                }
-                
-                // Update training statistics (for AI_0 as representative)
-                if (mainStats && trainingEpochCount <= maxTrainingEpochs) {
-                    updateTrainingStats(mainStats, networks[0], validationInputs, 
-                                      validationOutputs, validationSize, networks[0]->learningRate);
-                }
+            for (int i = 0; i < numPlayers; i++) {
+                trainFromExperience(networks[i], rb, 128);
             }
         }
         
-        // Show progress every 100 epochs
-        if (trainingEpochCount > 0 && trainingEpochCount % 100 == 0 && mainStats) {
-            clock_t currentTime = clock();
-            double elapsed = ((double)(currentTime - startTime)) / CLOCKS_PER_SEC;
+        // Progress checkpoints
+        if (game % (numGames / 20) == 0 && game > 0) {
+            printf("Game %d/%d (%.1f%%)\n", game, numGames, (game * 100.0) / numGames);
             
-            printf("Game %d/%d (%.1f%%) | Time: %.1fs | Experience: %d samples\n", 
-                   game, numGames, (game * 100.0) / numGames, elapsed, rb->size);
-            displayTrainingProgress(mainStats, false);
-        }
-        
-        // Show game progress checkpoints (without epoch info)
-        if (game > 0 && (game % gamesPerCheckpoint == 0 || game == numGames - 1)) {
-            // Log to file
             if (progressFile) {
                 fprintf(progressFile, "%d", game);
                 for (int i = 0; i < numPlayers; i++) {
                     double winRate = (game > 0) ? (wins[i] * 100.0) / game : 0.0;
                     fprintf(progressFile, ",%.2f", winRate);
                 }
-                fprintf(progressFile, ",%.1f,%d\n", 
-                        (avgCredits[0] + avgCredits[1] + avgCredits[2] + avgCredits[3]) / numPlayers,
-                        rb->size);
+                fprintf(progressFile, "\n");
                 fflush(progressFile);
             }
         }
         
-        // Progress dots for other games
-        if (game % (numGames / 100) == 0 && game % gamesPerCheckpoint != 0) {
+        if (game % (numGames / 100) == 0) {
             printf(".");
             fflush(stdout);
         }
@@ -1828,25 +1366,16 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     clock_t endTime = clock();
     double totalTime = ((double)(endTime - startTime)) / CLOCKS_PER_SEC;
     
-    printf("\n\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("PURE REINFORCEMENT LEARNING COMPLETE!\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("Total training time: %.2f seconds (%.2f minutes)\n", totalTime, totalTime / 60.0);
-    printf("Games played: %d\n", numGames);
-    printf("Experience samples: %d\n", rb->size);
-    printf("Neural network training epochs: %d\n", trainingEpochCount);
+    printf("\n\nSelf-play learning complete!\n");
+    printf("Time: %.2f minutes | Games: %d | Experience: %d\n", 
+           totalTime / 60.0, numGames, rb->size);
     
-    printf("\nFINAL EVOLVED STRATEGIES:\n");
+    // Find best AI
     int bestAI = 0;
     int maxWins = wins[0];
-    
     for (int i = 0; i < numPlayers; i++) {
         double winRate = (double)wins[i] / numGames;
-        printf("AI_%d: %.1f%% (%d wins) | Final Credits: %.0f\n", 
-               i, winRate * 100, wins[i], avgCredits[i]);
+        printf("AI_%d: %.1f%% win rate (%d wins)\n", i, winRate * 100, wins[i]);
         
         if (wins[i] > maxWins) {
             maxWins = wins[i];
@@ -1854,98 +1383,53 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
         }
     }
     
-    printf("\nBest evolved AI: AI_%d (%.1f%% win rate)\n", bestAI, (wins[bestAI] * 100.0) / numGames);
-    printf("This AI discovered its own strategy through pure self-play!\n");
-    
-    // Display detailed training summary at the end
-    if (mainStats && rb->size >= validationSize) {
-        printf("\n");
-        displayTrainingSummary(mainStats, networks[bestAI], validationInputs, validationSize);
-    }
-    
-    // Save the best evolved network
+    printf("Best AI: AI_%d\n", bestAI);
     saveNetwork(networks[bestAI], "poker_ai_evolved.dat");
-    printf("Best evolved AI saved as: poker_ai_evolved.dat\n");
     
-    // Save all networks as backups
+    // Save all networks
     for (int i = 0; i < numPlayers; i++) {
         char filename[100];
         sprintf(filename, "evolved_ai_%d.dat", i);
         saveNetwork(networks[i], filename);
     }
     
-    printf("All evolved AIs saved. Training logs: selfplay_progress.csv\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    
     // Cleanup
     if (progressFile) fclose(progressFile);
     if (bootstrap) freeNetwork(bootstrap);
-    
-    // Cleanup training statistics
-    if (mainStats) {
-        if (mainStats->logFile) fclose(mainStats->logFile);
-        free(mainStats->lossHistory);
-        free(mainStats->epochNumbers);
-        free(mainStats);
-    }
-    
     for (int i = 0; i < numPlayers; i++) {
         freeNetwork(networks[i]);
     }
     free(networks);
-    
-    // Cleanup validation data
-    for (int i = 0; i < validationSize; i++) {
-        free(validationInputs[i]);
-        free(validationOutputs[i]);
-    }
-    free(validationInputs);
-    free(validationOutputs);
-    
     free(rb->buffer);
     free(rb);
 }
 
-// Combined two-phase training function
+// Combined two-phase training (simplified)
 void trainTwoPhaseAI(int numGames, int numPlayers) {
     printf("\n");
-    printRepeatedChar('*', 70);
+    printChar('*', 60);
+    printf("\nTWO-PHASE AI TRAINING\n");
+    printf("Phase 1: Bootstrap (basic rules)\n");
+    printf("Phase 2: Self-play (strategy discovery)\n");
+    printChar('*', 60);
     printf("\n");
-    printf("TWO-PHASE AI TRAINING\n");
-    printf("Phase 1: Minimal Bootstrap (basic rules)\n");
-    printf("Phase 2: Pure Self-Play Learning (strategy discovery)\n");
-    printRepeatedChar('*', 70);
-    printf("\n");
     
-    // Phase 1: Quick bootstrap
-    NeuralNetwork *bootstrap = trainMinimalBootstrap();
-    if (!bootstrap) {
-        printf("Bootstrap training failed!\n");
-        return;
-    }
-    
-    printf("\nBootstrap complete! Press Enter to begin self-play learning...");
-    getchar();
-    
-    // Free bootstrap network (it's saved to file)
+    // Phase 1
+    NeuralNetwork *bootstrap = trainBootstrap();
     freeNetwork(bootstrap);
     
-    // Phase 2: Pure self-play learning
-    pureReinforcementLearning(numGames, numPlayers);
+    printf("\nBootstrap complete. Press Enter to begin self-play...");
+    getchar();
     
-    printf("\n");
-    printRepeatedChar('*', 70);
-    printf("\n");
-    printf("TWO-PHASE TRAINING COMPLETE!\n");
-    printf("Your AI has evolved its own poker strategy!\n");
+    // Phase 2
+    trainSelfPlay(numGames, numPlayers);
+    
+    printf("\nTwo-phase training complete!\n");
     printf("Files created:\n");
-    printf("  - poker_ai_bootstrap.dat (Phase 1 result)\n");
-    printf("  - poker_ai_evolved.dat (Phase 2 best AI)\n");
-    printf("  - evolved_ai_*.dat (All trained AIs)\n");
-    printf("  - selfplay_progress.csv (Training progress log)\n");
-    printRepeatedChar('*', 70);
-    printf("\n");
+    printf("  - poker_ai_bootstrap.dat\n");
+    printf("  - poker_ai_evolved.dat\n");
+    printf("  - evolved_ai_*.dat\n");
+    printf("  - selfplay_progress.csv\n");
 }
 
 
@@ -1967,13 +1451,26 @@ EvolutionaryTrainer* createEvolutionaryTrainer(int populationSize, int maxGenera
     trainer->populationSize = populationSize;
     trainer->maxGenerations = maxGenerations;
     trainer->currentGeneration = 0;
-    trainer->gamesPerGeneration = 150;  // Each AI plays ~150 games per generation
+    trainer->gamesPerGeneration = 50;  // REDUCED: Start with 50 games per generation for testing
     
-    // Evolution parameters (your specified values)
+    // FIXED Evolution parameters - better balance
     trainer->selectionRate = 0.20;     // Keep top 20%
-    trainer->mutationRate = 0.50;      // 50% mutation
+    trainer->mutationRate = 0.40;      // 40% mutation (reduced)
     trainer->crossoverRate = 0.30;     // 30% crossover  
-    trainer->freshRate = 0.20;         // 20% fresh random
+    trainer->freshRate = 0.10;         // 10% fresh blood (was 0.20, causing overflow)
+    
+    // Verify parameters add up correctly
+    double totalRate = trainer->selectionRate + trainer->mutationRate + 
+                      trainer->crossoverRate + trainer->freshRate;
+    if (totalRate > 1.0) {
+        printf("Warning: Evolution rates sum to %.2f, adjusting...\n", totalRate);
+        trainer->freshRate = 1.0 - trainer->selectionRate - trainer->mutationRate - trainer->crossoverRate;
+        if (trainer->freshRate < 0) trainer->freshRate = 0;
+    }
+    
+    printf("Evolution rates: Keep %.0f%% | Mutate %.0f%% | Cross %.0f%% | Fresh %.0f%%\n",
+           trainer->selectionRate * 100, trainer->mutationRate * 100,
+           trainer->crossoverRate * 100, trainer->freshRate * 100);
     
     // Performance tracking
     trainer->bestFitnessEver = 0.0;
@@ -2010,8 +1507,8 @@ EvolutionaryTrainer* createEvolutionaryTrainer(int populationSize, int maxGenera
     }
     
     printf("Evolutionary trainer created successfully!\n");
-    printf("Population: %d AIs | Generations: %d | Tables: %d\n", 
-           populationSize, maxGenerations, trainer->numTables);
+    printf("Population: %d AIs | Generations: %d | Tables: %d | Games/Gen: %d\n", 
+           populationSize, maxGenerations, trainer->numTables, trainer->gamesPerGeneration);
     
     return trainer;
 }
@@ -2342,58 +1839,106 @@ void setupTournamentTables(EvolutionaryTrainer *trainer) {
     free(availableAIs);
 }
 
-void runTournamentGeneration(EvolutionaryTrainer *trainer) {
-    printf("Running tournament generation %d...\n", trainer->currentGeneration + 1);
+void runTournamentGenerationDebug(EvolutionaryTrainer *trainer) {
+    printf("Running generation %d tournament with DEBUG...\n", trainer->currentGeneration + 1);
     trainer->generationStartTime = clock();
     
-    // Reset all individual stats for this generation
+    // Run initial diagnostic
+    if (trainer->currentGeneration == 0) {
+        printf("Running self-play game diagnostic...\n");
+        debugSelfPlayGame();
+    }
+    
+    // Reset stats
     for (int i = 0; i < trainer->populationSize; i++) {
         trainer->population[i].wins = 0;
         trainer->population[i].games = 0;
         trainer->population[i].totalCredits = 0.0;
     }
     
-    // Run multiple tournament rounds to get sufficient data
-    int roundsPerGeneration = (trainer->gamesPerGeneration + trainer->numTables - 1) / trainer->numTables;
+    int totalGamePlaysNeeded = trainer->populationSize * trainer->gamesPerGeneration;
+    int totalTableGamesNeeded = totalGamePlaysNeeded / 4;
+    int roundsPerGeneration = totalTableGamesNeeded / trainer->numTables;
+    
+    printf("Target: %d games per AI | Table games needed: %d | Rounds: %d\n", 
+           trainer->gamesPerGeneration, totalTableGamesNeeded, roundsPerGeneration);
+    
+    // Track timing
+    clock_t roundStart = clock();
+    int suspiciousTables = 0;
     
     for (int round = 0; round < roundsPerGeneration; round++) {
         printf("  Round %d/%d: ", round + 1, roundsPerGeneration);
         
-        // Set up random tables for this round
         setupTournamentTables(trainer);
         
-        // Run all tables in parallel (conceptually)
         for (int table = 0; table < trainer->numTables; table++) {
-            runSingleTable(trainer, table);
+            bool verbose = (table < 3 && round == 0); // Verbose for first few tables
+            runSingleTableDebug(trainer, table, verbose);
             
-            // Progress indicator
-            if (table % 50 == 0) {
+            if (table % 10 == 0) {
                 printf(".");
                 fflush(stdout);
             }
         }
-        printf(" Complete!\n");
-    }
+        printf(" Complete\n");
+        
+        // Check timing after first round
+        if (round == 0) {
+            clock_t roundEnd = clock();
+            double roundTime = ((double)(roundEnd - roundStart)) / CLOCKS_PER_SEC;
+            printf("  First round time: %.2f seconds\n", roundTime);
+            
+            if (roundTime < 0.1) {
+                printf("  WARNING: Round finished too quickly!\n");
+            }
+        }
+    }    // Final validation
+    int minGames = trainer->populationSize;
+    int maxGames = 0;
+    int negativeCredits = 0;
+    double totalProfit = 0;
     
-    // Calculate final stats for this generation
     for (int i = 0; i < trainer->populationSize; i++) {
         Individual *individual = &trainer->population[i];
         if (individual->games > 0) {
             individual->winRate = (double)individual->wins / individual->games;
             individual->avgCredits = individual->totalCredits / individual->games;
-        } else {
-            individual->winRate = 0.0;
-            individual->avgCredits = 0.0;
+            
+            if (individual->games < minGames) minGames = individual->games;
+            if (individual->games > maxGames) maxGames = individual->games;
+            
+            if (individual->avgCredits < 0) negativeCredits++;
+            
+            double profit = individual->avgCredits - STARTING_CREDITS;
+            totalProfit += profit;
         }
     }
     
-    printf("Generation %d tournament complete!\n", trainer->currentGeneration + 1);
+    double avgProfit = totalProfit / trainer->populationSize;
+    
+    printf("\n=== GENERATION VALIDATION ===\n");
+    printf("Games per AI: min=%d, max=%d (target: %d)\n", minGames, maxGames, trainer->gamesPerGeneration);
+    printf("AIs with negative avg credits: %d/%d\n", negativeCredits, trainer->populationSize);
+    printf("Average profit per AI: %.1f credits (%.1f%%)\n", avgProfit, (avgProfit / STARTING_CREDITS) * 100);
+    
+    if (negativeCredits > trainer->populationSize * 0.8) {
+        printf("CRITICAL: >80%% of AIs have negative credits - game simulation is broken!\n");
+    }
+    
+    if (avgProfit < -STARTING_CREDITS * 0.5) {
+        printf("CRITICAL: Average loss >50%% - something is very wrong!\n");
+    }
+    
+    printf("Generation %d complete\n", trainer->currentGeneration + 1);
 }
 
-void runSingleTable(EvolutionaryTrainer *trainer, int tableIndex) {
+void runSingleTableDebug(EvolutionaryTrainer *trainer, int tableIndex, bool verbose) {
     TournamentTable *table = &trainer->tables[tableIndex];
     
-    // Create temporary player array for this game
+    if (verbose) printf("Running table %d with AIs: ", tableIndex);
+    
+    // Create temporary player array
     Player players[4];
     NeuralNetwork *networks[4];
     
@@ -2402,18 +1947,78 @@ void runSingleTable(EvolutionaryTrainer *trainer, int tableIndex) {
         int aiIndex = table->playerIndices[i];
         networks[i] = trainer->population[aiIndex].network;
         
-        // Initialize player
         sprintf(players[i].name, "AI_%d", aiIndex);
         players[i].credits = STARTING_CREDITS;
         players[i].currentBet = 0;
         players[i].hand = NULL;
+        players[i].status = ACTIVE;
+        players[i].dealer = (i == 0);
+        
+        if (verbose) printf("%d ", aiIndex);
+    }
+    if (verbose) printf("\n");
+    
+    // Create replay buffer
+    ReplayBuffer *tempBuffer = createReplayBuffer(1000);
+    if (!tempBuffer) {
+        printf("ERROR: Could not create temp buffer for table %d\n", tableIndex);
+        return;
     }
     
-    // Create a temporary replay buffer (not used for training during tournaments)
-    ReplayBuffer *tempBuffer = createReplayBuffer(1000);
-    
-    // Play the game using existing self-play infrastructure
+    // Time the game
+    clock_t gameStart = clock();
     GameRecord record = playEnhancedSelfPlayGame(networks, 4, tempBuffer);
+    clock_t gameEnd = clock();
+    double gameTime = ((double)(gameEnd - gameStart)) / CLOCKS_PER_SEC;
+    
+    if (verbose) {
+        printf("  Game time: %.4f seconds\n", gameTime);
+        printf("  Hands played: %d\n", record.totalHands);
+        printf("  Winner: %d\n", record.winner);
+    }
+    
+    // Validate results before updating stats
+    bool valid = true;
+    double totalCredits = 0;
+    
+    for (int i = 0; i < 4; i++) {
+        totalCredits += record.finalCredits[i];
+        
+        if (record.finalCredits[i] < 0) {
+            if (verbose) printf("  ERROR: AI %d has negative credits: %.1f\n", 
+                               table->playerIndices[i], record.finalCredits[i]);
+            record.finalCredits[i] = 0; // Fix negative credits
+            valid = false;
+        }
+        
+        if (record.finalCredits[i] > STARTING_CREDITS * 10) {
+            if (verbose) printf("  ERROR: AI %d has excessive credits: %.1f\n", 
+                               table->playerIndices[i], record.finalCredits[i]);
+            record.finalCredits[i] = STARTING_CREDITS * 4; // Cap excessive credits
+            valid = false;
+        }
+    }
+    
+    // Check credit conservation
+    double expectedTotal = 4 * STARTING_CREDITS;
+    if (fabs(totalCredits - expectedTotal) > 1.0) {
+        if (verbose) printf("  ERROR: Credit conservation violated. Expected: %.0f, Actual: %.1f\n", 
+                           expectedTotal, totalCredits);
+        
+        // Fix by redistributing proportionally
+        if (totalCredits > 0) {
+            double ratio = expectedTotal / totalCredits;
+            for (int i = 0; i < 4; i++) {
+                record.finalCredits[i] *= ratio;
+            }
+        } else {
+            // Fallback: equal distribution
+            for (int i = 0; i < 4; i++) {
+                record.finalCredits[i] = STARTING_CREDITS;
+            }
+        }
+        valid = false;
+    }
     
     // Update individual statistics
     for (int i = 0; i < 4; i++) {
@@ -2433,17 +2038,25 @@ void runSingleTable(EvolutionaryTrainer *trainer, int tableIndex) {
     table->winner = record.winner;
     table->completed = true;
     
+    // Log suspicious games
+    if (record.totalHands == 0) {
+        printf("SUSPICIOUS TABLE %d: valid=%s, time=%.4fs, hands=%d\n", 
+               tableIndex, valid ? "true" : "false", gameTime, record.totalHands);
+    }
+    
     // Cleanup
-    free(tempBuffer->buffer);
+    if (tempBuffer->buffer) {
+        free(tempBuffer->buffer);
+    }
     free(tempBuffer);
     
     for (int i = 0; i < 4; i++) {
         if (players[i].hand) {
             freeHand(players[i].hand, 1);
+            players[i].hand = NULL;
         }
     }
 }
-
 // ===================================================================
 // FITNESS EVALUATION
 // ===================================================================
@@ -2451,45 +2064,66 @@ void runSingleTable(EvolutionaryTrainer *trainer, int tableIndex) {
 double calculateIndividualFitness(Individual *individual) {
     if (individual->games == 0) return 0.0;
     
-    // Multi-objective fitness function
-    double winRateScore = individual->winRate * 100.0;           // 0-100 points
-    double creditsScore = (individual->avgCredits / 1000.0) * 50.0; // Up to 50 points
-    double consistencyBonus = 0.0;
+    // IMPROVED: More balanced multi-objective fitness function
+    double winRateScore = individual->winRate * 40.0;  // 0-40 points (reduced weight)
     
-    // Bonus for consistency (playing many games without huge losses)
-    if (individual->games >= 50) {
-        double avgCredits = individual->avgCredits;
-        if (avgCredits > 900) consistencyBonus = 10.0;      // Very consistent
-        else if (avgCredits > 800) consistencyBonus = 5.0;  // Reasonably consistent
+    // Profit-based scoring with diminishing returns to prevent runaway values
+    double profitMargin = (individual->avgCredits - STARTING_CREDITS) / STARTING_CREDITS;
+    double profitScore = 0.0;
+    
+    if (profitMargin >= 0) {
+        // Positive profits: diminishing returns after 100% profit
+        if (profitMargin <= 1.0) {
+            profitScore = profitMargin * 60.0;  // 0-60 points for 0-100% profit
+        } else {
+            // Diminishing returns for excessive profits
+            profitScore = 60.0 + (profitMargin - 1.0) * 20.0;  // Additional 20 points per 100% above 100%
+            if (profitScore > 100.0) profitScore = 100.0;  // Cap at 100
+        }
+    } else {
+        // Negative profits: penalty but not too harsh
+        profitScore = profitMargin * 40.0;  // Can go down to -40 for 100% loss
+        if (profitScore < -50.0) profitScore = -50.0;  // Floor at -50
     }
     
-    // Experience bonus (reward AIs that have played more games)
-    double experienceBonus = fmin(individual->games / 100.0, 5.0); // Up to 5 points
+    // Consistency bonus (smaller impact)
+    double consistencyBonus = 0.0;
+    if (individual->games >= 15) {
+        if (individual->avgCredits > STARTING_CREDITS * 1.2) consistencyBonus = 8.0;
+        else if (individual->avgCredits > STARTING_CREDITS * 1.0) consistencyBonus = 5.0;
+        else if (individual->avgCredits > STARTING_CREDITS * 0.8) consistencyBonus = 2.0;
+    }
     
-    // Calculate total fitness
-    double fitness = winRateScore + creditsScore + consistencyBonus + experienceBonus;
+    // Experience bonus (reduced impact)
+    double experienceBonus = fmin(individual->games / 30.0, 3.0); // Up to 3 points
     
-    return fitness;
+    // ADDED: Diversity bonus to encourage different strategies
+    double diversityBonus = 0.0;
+    if (individual->winRate < 0.95 && individual->winRate > 0.05) {
+        diversityBonus = 2.0;  // Small bonus for not being too extreme
+    }
+    
+    // Total fitness
+    double fitness = winRateScore + profitScore + consistencyBonus + experienceBonus + diversityBonus;
+    
+    return fmax(fitness, 0.1); // Minimum 0.1 to avoid zero fitness
 }
 
 void evaluatePopulationFitness(EvolutionaryTrainer *trainer) {
-    printf("Evaluating population fitness...\n");
+    printf("Evaluating fitness...\n");
     
-    double totalFitness = 0.0;
     double bestFitness = 0.0;
     int bestIndex = 0;
     
     for (int i = 0; i < trainer->populationSize; i++) {
         Individual *individual = &trainer->population[i];
         individual->fitness = calculateIndividualFitness(individual);
-        totalFitness += individual->fitness;
         
         if (individual->fitness > bestFitness) {
             bestFitness = individual->fitness;
             bestIndex = i;
         }
         
-        // Assign strategy labels based on behavior
         assignStrategyLabel(individual);
     }
     
@@ -2497,61 +2131,103 @@ void evaluatePopulationFitness(EvolutionaryTrainer *trainer) {
     if (bestFitness > trainer->bestFitnessEver) {
         trainer->bestFitnessEver = bestFitness;
         trainer->bestIndividualEver = bestIndex;
-        
-        // Update hall of fame
         updateHallOfFame(trainer, &trainer->population[bestIndex]);
-        
-        printf("NEW BEST AI FOUND! Index %d, Fitness: %.2f\n", bestIndex, bestFitness);
+        printf("NEW BEST AI FOUND! Fitness: %.2f\n", bestFitness);
     }
     
-    // Record generation average
-    double avgFitness = totalFitness / trainer->populationSize;
+    double avgFitness = 0;
+    for (int i = 0; i < trainer->populationSize; i++) {
+        avgFitness += trainer->population[i].fitness;
+    }
+    avgFitness /= trainer->populationSize;
     trainer->avgFitnessHistory[trainer->currentGeneration] = avgFitness;
     
-    printf("Generation %d fitness - Best: %.2f | Average: %.2f\n", 
-           trainer->currentGeneration + 1, bestFitness, avgFitness);
+    printf("Fitness - Best: %.2f | Average: %.2f\n", bestFitness, avgFitness);
 }
 
 void assignStrategyLabel(Individual *individual) {
-    if (individual->games < 10) {
+    if (individual->games < 5) {
         strcpy(individual->strategy, "Untested");
         return;
     }
     
     double winRate = individual->winRate;
     double avgCredits = individual->avgCredits;
+    double profitMargin = (avgCredits - STARTING_CREDITS) / STARTING_CREDITS;
     
-    // Simple strategy classification based on performance
-    if (winRate > 0.4 && avgCredits > 1100) {
+    // FIXED: More balanced strategy classification with higher thresholds
+    // This should create more diverse strategy distribution
+    if (winRate >= 0.75 && profitMargin >= 1.5) {
         strcpy(individual->strategy, "Dominant");
-    } else if (winRate > 0.3 && avgCredits > 1000) {
+    } else if (winRate >= 0.60 && profitMargin >= 1.0) {
         strcpy(individual->strategy, "Aggressive");
-    } else if (winRate > 0.2 && avgCredits > 900) {
+    } else if (winRate >= 0.45 && profitMargin >= 0.5) {
         strcpy(individual->strategy, "Conservative");
-    } else if (winRate > 0.15) {
+    } else if (winRate >= 0.30 && profitMargin >= 0.0) {
         strcpy(individual->strategy, "Survivor");
-    } else {
+    } else if (profitMargin >= -0.3) {
         strcpy(individual->strategy, "Struggling");
+    } else {
+        strcpy(individual->strategy, "Weak");
+    }
+    
+    // Special case: High win rate but low profits = too passive
+    if (winRate >= 0.50 && profitMargin < 0.3) {
+        strcpy(individual->strategy, "Passive");
+    }
+    
+    // Special case: Low win rate but high profits = lucky/aggressive
+    if (winRate < 0.40 && profitMargin > 0.8) {
+        strcpy(individual->strategy, "Lucky");
+    }
+    
+    // Special case: Very high profits regardless of win rate
+    if (profitMargin >= 2.0) {
+        strcpy(individual->strategy, "Elite");
     }
 }
-
 void updateHallOfFame(EvolutionaryTrainer *trainer, Individual *candidate) {
-    // Simple insertion into hall of fame (top 10)
+    // Create a copy of the candidate for hall of fame
+    Individual *candidateCopy = malloc(sizeof(Individual));
+    if (!candidateCopy) return;
+    
+    // Copy all data (but not the network pointer)
+    candidateCopy->fitness = candidate->fitness;
+    candidateCopy->wins = candidate->wins;
+    candidateCopy->games = candidate->games;
+    candidateCopy->totalCredits = candidate->totalCredits;
+    candidateCopy->avgCredits = candidate->avgCredits;
+    candidateCopy->winRate = candidate->winRate;
+    candidateCopy->generation = candidate->generation;
+    candidateCopy->parentA = candidate->parentA;
+    candidateCopy->parentB = candidate->parentB;
+    strcpy(candidateCopy->strategy, candidate->strategy);
+    candidateCopy->network = NULL; // Don't copy network pointer
+    
+    // Find insertion point in hall of fame
     for (int i = 0; i < 10; i++) {
         if (trainer->hallOfFame[i] == NULL || 
-            candidate->fitness > trainer->hallOfFame[i]->fitness) {
+            candidateCopy->fitness > trainer->hallOfFame[i]->fitness) {
             
-            // Shift others down
+            // Shift others down and free displaced entry
+            if (trainer->hallOfFame[9] != NULL) {
+                free(trainer->hallOfFame[9]);
+            }
+            
             for (int j = 9; j > i; j--) {
                 trainer->hallOfFame[j] = trainer->hallOfFame[j-1];
             }
             
             // Insert new candidate
-            trainer->hallOfFame[i] = candidate;
-            break;
+            trainer->hallOfFame[i] = candidateCopy;
+            return;
         }
     }
+    
+    // If we get here, candidate wasn't good enough
+    free(candidateCopy);
 }
+
 
 // Comparison function for qsort
 int compareFitness(const void *a, const void *b) {
@@ -2564,15 +2240,13 @@ int compareFitness(const void *a, const void *b) {
 }
 
 void rankPopulation(EvolutionaryTrainer *trainer) {
-    // Sort population by fitness (highest first)
     qsort(trainer->population, trainer->populationSize, sizeof(Individual), compareFitness);
     
-    printf("Population ranked by fitness!\n");
-    printf("Top 5 AIs:\n");
-    for (int i = 0; i < 5; i++) {
+    printf("Top 3 AIs:\n");
+    for (int i = 0; i < 3; i++) {
         Individual *ai = &trainer->population[i];
-        printf("  #%d: Fitness %.2f | Win Rate %.1f%% | Avg Credits %.0f | %s\n",
-               i + 1, ai->fitness, ai->winRate * 100, ai->avgCredits, ai->strategy);
+        printf("  #%d: Fitness %.2f | Win Rate %.1f%% | %s\n",
+               i + 1, ai->fitness, ai->winRate * 100, ai->strategy);
     }
 }
 
@@ -2721,61 +2395,60 @@ void evolvePopulation(EvolutionaryTrainer *trainer) {
 // ===================================================================
 // PROGRESS TRACKING AND DISPLAY
 // ===================================================================
-
 void displayGenerationSummary(EvolutionaryTrainer *trainer) {
     clock_t currentTime = clock();
     double generationTime = ((double)(currentTime - trainer->generationStartTime)) / CLOCKS_PER_SEC;
     double totalTime = ((double)(currentTime - trainer->startTime)) / CLOCKS_PER_SEC;
     
     printf("\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("GENERATION %d SUMMARY\n", trainer->currentGeneration);
-    printRepeatedChar('=', 70);
+    printChar('=', 50);
+    printf("\nGENERATION %d SUMMARY\n", trainer->currentGeneration);
+    printChar('=', 50);
     printf("\n");
     
-    // Time statistics
-    printf("Generation Time: %.1f seconds | Total Time: %.1f minutes\n", 
-           generationTime, totalTime / 60.0);
+    // Fixed time display
+    printf("Time: %.1fs (Total: %.1fm)\n", generationTime, totalTime / 60.0);
     
-    // Performance statistics
-    Individual *best = &trainer->population[0]; // Already sorted
-    printf("\nBest AI This Generation:\n");
-    printf("  Fitness: %.2f | Win Rate: %.1f%% | Avg Credits: %.0f\n",
+    Individual *best = &trainer->population[0];
+    printf("Best AI: Fitness %.2f | Win Rate %.1f%% | Avg Credits %.0f\n",
            best->fitness, best->winRate * 100, best->avgCredits);
-    printf("  Strategy: %s | Games Played: %d\n", best->strategy, best->games);
-    
-    // Population diversity
-    printf("\nPopulation Diversity:\n");
-    int strategyCounts[6] = {0}; // Dominant, Aggressive, Conservative, Survivor, Struggling, Other
+    printf("Strategy: %s | Games: %d | Profit: %.1f%%\n", 
+           best->strategy, best->games, 
+           ((best->avgCredits - STARTING_CREDITS) / STARTING_CREDITS) * 100);
+      // Population diversity with better counting
+    int strategyCounts[10] = {0}; // UPDATED: More strategy categories
     for (int i = 0; i < trainer->populationSize; i++) {
-        if (strcmp(trainer->population[i].strategy, "Dominant") == 0) strategyCounts[0]++;
-        else if (strcmp(trainer->population[i].strategy, "Aggressive") == 0) strategyCounts[1]++;
-        else if (strcmp(trainer->population[i].strategy, "Conservative") == 0) strategyCounts[2]++;
-        else if (strcmp(trainer->population[i].strategy, "Survivor") == 0) strategyCounts[3]++;
-        else if (strcmp(trainer->population[i].strategy, "Struggling") == 0) strategyCounts[4]++;
-        else strategyCounts[5]++;
+        if (strcmp(trainer->population[i].strategy, "Elite") == 0) strategyCounts[0]++;
+        else if (strcmp(trainer->population[i].strategy, "Dominant") == 0) strategyCounts[1]++;
+        else if (strcmp(trainer->population[i].strategy, "Aggressive") == 0) strategyCounts[2]++;
+        else if (strcmp(trainer->population[i].strategy, "Conservative") == 0) strategyCounts[3]++;
+        else if (strcmp(trainer->population[i].strategy, "Survivor") == 0) strategyCounts[4]++;
+        else if (strcmp(trainer->population[i].strategy, "Passive") == 0) strategyCounts[5]++;
+        else if (strcmp(trainer->population[i].strategy, "Lucky") == 0) strategyCounts[6]++;
+        else if (strcmp(trainer->population[i].strategy, "Struggling") == 0) strategyCounts[7]++;
+        else if (strcmp(trainer->population[i].strategy, "Weak") == 0) strategyCounts[8]++;
+        else strategyCounts[9]++;
     }
     
-    printf("  Dominant: %d | Aggressive: %d | Conservative: %d\n", 
-           strategyCounts[0], strategyCounts[1], strategyCounts[2]);
-    printf("  Survivor: %d | Struggling: %d | Other: %d\n",
-           strategyCounts[3], strategyCounts[4], strategyCounts[5]);
+    printf("Strategies: Elite:%d Dom:%d Agg:%d Con:%d Sur:%d Pass:%d Lucky:%d Str:%d Weak:%d Other:%d\n", 
+           strategyCounts[0], strategyCounts[1], strategyCounts[2], strategyCounts[3], 
+           strategyCounts[4], strategyCounts[5], strategyCounts[6], strategyCounts[7],
+           strategyCounts[8], strategyCounts[9]);
     
     // Progress estimate
     double avgTimePerGeneration = totalTime / (trainer->currentGeneration + 1);
     double estimatedRemaining = avgTimePerGeneration * (trainer->maxGenerations - trainer->currentGeneration - 1);
-    printf("\nProgress: %d/%d generations (%.1f%%)\n",
+    printf("Progress: %d/%d (%.1f%%) | ETA: %.1fm\n",
            trainer->currentGeneration + 1, trainer->maxGenerations,
-           ((trainer->currentGeneration + 1) * 100.0) / trainer->maxGenerations);
-    printf("Estimated time remaining: %.1f minutes\n", estimatedRemaining / 60.0);
+           ((trainer->currentGeneration + 1) * 100.0) / trainer->maxGenerations,
+           estimatedRemaining / 60.0);
     
-    printRepeatedChar('=', 70);
+    printChar('=', 50);
     printf("\n");
     
     // Log to file
     if (trainer->evolutionLog) {
-        for (int i = 0; i < 10; i++) { // Log top 10 this generation
+        for (int i = 0; i < 5; i++) {
             Individual *ai = &trainer->population[i];
             fprintf(trainer->evolutionLog, "%d,%d,%.4f,%.4f,%.2f,%s,%d,%d\n",
                     trainer->currentGeneration, i, ai->fitness, ai->winRate,
@@ -2785,45 +2458,106 @@ void displayGenerationSummary(EvolutionaryTrainer *trainer) {
     }
 }
 
-void displayFinalEvolutionResults(EvolutionaryTrainer *trainer) {
+void displayEvolutionResults(EvolutionaryTrainer *trainer) {
     clock_t endTime = clock();
     double totalTime = ((double)(endTime - trainer->startTime)) / CLOCKS_PER_SEC;
     
     printf("\n");
-    printRepeatedChar('*', 80);
-    printf("\n");
-    printf("EVOLUTIONARY TRAINING COMPLETE!\n");
-    printRepeatedChar('*', 80);
+    printChar('*', 60);
+    printf("\nEVOLUTIONARY TRAINING COMPLETE!\n");
+    printChar('*', 60);
     printf("\n");
     
-    printf("EVOLUTION SUMMARY:\n");
-    printf("Total Generations: %d\n", trainer->maxGenerations);
-    printf("Population Size: %d AIs\n", trainer->populationSize);
-    printf("Total Training Time: %.2f minutes (%.2f hours)\n", 
-           totalTime / 60.0, totalTime / 3600.0);
-    printf("Games Played: ~%d total games\n", 
+    printf("Summary:\n");
+    printf("  Generations: %d\n", trainer->maxGenerations);
+    printf("  Population: %d AIs\n", trainer->populationSize);
+    printf("  Training Time: %.2f hours\n", totalTime / 3600.0);
+    printf("  Total Games: ~%d\n", 
            trainer->populationSize * trainer->gamesPerGeneration * trainer->maxGenerations);
     
-    printf("\nCHAMPION AI:\n");
     Individual *champion = &trainer->population[0];
-    printf("Final Fitness: %.2f\n", champion->fitness);
-    printf("Win Rate: %.1f%% (%d wins in %d games)\n", 
+    printf("\nChampion AI:\n");
+    printf("  Fitness: %.2f\n", champion->fitness);
+    printf("  Win Rate: %.1f%% (%d/%d)\n", 
            champion->winRate * 100, champion->wins, champion->games);
-    printf("Average Credits: %.0f\n", champion->avgCredits);
-    printf("Strategy Type: %s\n", champion->strategy);
-    printf("Generation Born: %d\n", champion->generation);
-    
-    printf("\nHALL OF FAME (Top 5 All-Time):\n");
-    for (int i = 0; i < 5 && trainer->hallOfFame[i] != NULL; i++) {
-        Individual *legend = trainer->hallOfFame[i];
-        printf("  #%d: Fitness %.2f | Win Rate %.1f%% | %s\n",
-               i + 1, legend->fitness, legend->winRate * 100, legend->strategy);
+    printf("  Avg Credits: %.0f\n", champion->avgCredits);
+    printf("  Profit Margin: %.1f%%\n", 
+           ((champion->avgCredits - STARTING_CREDITS) / STARTING_CREDITS) * 100);
+    printf("  Strategy: %s\n", champion->strategy);
+    printf("  Generation: %d\n", champion->generation);
+      printf("\nFinal Population Strategy Distribution:\n");
+    int strategyCounts[10] = {0};  // INCREASED: More strategy categories
+    for (int i = 0; i < trainer->populationSize; i++) {
+        if (strcmp(trainer->population[i].strategy, "Elite") == 0) strategyCounts[0]++;
+        else if (strcmp(trainer->population[i].strategy, "Dominant") == 0) strategyCounts[1]++;
+        else if (strcmp(trainer->population[i].strategy, "Aggressive") == 0) strategyCounts[2]++;
+        else if (strcmp(trainer->population[i].strategy, "Conservative") == 0) strategyCounts[3]++;
+        else if (strcmp(trainer->population[i].strategy, "Survivor") == 0) strategyCounts[4]++;
+        else if (strcmp(trainer->population[i].strategy, "Passive") == 0) strategyCounts[5]++;
+        else if (strcmp(trainer->population[i].strategy, "Lucky") == 0) strategyCounts[6]++;
+        else if (strcmp(trainer->population[i].strategy, "Struggling") == 0) strategyCounts[7]++;
+        else if (strcmp(trainer->population[i].strategy, "Weak") == 0) strategyCounts[8]++;
+        else strategyCounts[9]++;  // Other/Unknown
     }
     
-    printf("\nEvolution log saved to: evolution_log.csv\n");
-    printf("Champion AI saved as: poker_ai_evolved_champion.dat\n");
+    printf("  Elite: %d (%.1f%%)\n", strategyCounts[0], (strategyCounts[0] * 100.0) / trainer->populationSize);
+    printf("  Dominant: %d (%.1f%%)\n", strategyCounts[1], (strategyCounts[1] * 100.0) / trainer->populationSize);
+    printf("  Aggressive: %d (%.1f%%)\n", strategyCounts[2], (strategyCounts[2] * 100.0) / trainer->populationSize);
+    printf("  Conservative: %d (%.1f%%)\n", strategyCounts[3], (strategyCounts[3] * 100.0) / trainer->populationSize);
+    printf("  Survivor: %d (%.1f%%)\n", strategyCounts[4], (strategyCounts[4] * 100.0) / trainer->populationSize);
+    printf("  Passive: %d (%.1f%%)\n", strategyCounts[5], (strategyCounts[5] * 100.0) / trainer->populationSize);
+    printf("  Lucky: %d (%.1f%%)\n", strategyCounts[6], (strategyCounts[6] * 100.0) / trainer->populationSize);
+    printf("  Struggling: %d (%.1f%%)\n", strategyCounts[7], (strategyCounts[7] * 100.0) / trainer->populationSize);
+    printf("  Weak: %d (%.1f%%)\n", strategyCounts[8], (strategyCounts[8] * 100.0) / trainer->populationSize);
+    printf("  Other: %d (%.1f%%)\n", strategyCounts[9], (strategyCounts[9] * 100.0) / trainer->populationSize);
     
-    printRepeatedChar('*', 80);
+    // Fixed Hall of Fame display (show current best performers, not broken references)
+    printf("\nHall of Fame (Current Top 5):\n");
+    for (int i = 0; i < 5 && i < trainer->populationSize; i++) {
+        Individual *top = &trainer->population[i]; // Current sorted population
+        printf("  #%d: Fitness %.2f | Win Rate %.1f%% | Credits %.0f | %s\n",
+               i + 1, top->fitness, top->winRate * 100, top->avgCredits, top->strategy);
+    }
+    
+    // Show historical best if different
+    if (trainer->bestIndividualEver >= 0 && trainer->bestFitnessEver > champion->fitness) {
+        printf("\nHistorical Best (Generation %d):\n", 
+               trainer->population[trainer->bestIndividualEver].generation);
+        printf("  Fitness: %.2f (better than current champion)\n", trainer->bestFitnessEver);
+    }
+    
+    printf("\nFiles saved:\n");
+    printf("  - evolution_log.csv (detailed log)\n");
+    printf("  - poker_ai_evolved_champion.dat (best AI)\n");
+    printf("  - evolved_champion_0-9.dat (top 10 AIs)\n");
+    
+    // Performance analysis
+    double avgProfit = 0;
+    int profitableAIs = 0;
+    for (int i = 0; i < trainer->populationSize; i++) {
+        double profit = trainer->population[i].avgCredits - STARTING_CREDITS;
+        avgProfit += profit;
+        if (profit > 0) profitableAIs++;
+    }
+    avgProfit /= trainer->populationSize;
+    
+    printf("\nPerformance Analysis:\n");
+    printf("  Profitable AIs: %d/%d (%.1f%%)\n", 
+           profitableAIs, trainer->populationSize, (profitableAIs * 100.0) / trainer->populationSize);
+    printf("  Average Profit: %.1f credits (%.1f%%)\n", 
+           avgProfit, (avgProfit / STARTING_CREDITS) * 100);
+    
+    if (strategyCounts[3] > trainer->populationSize * 0.7) {
+        printf("\nNOTE: High percentage of 'Survivor' strategies suggests overly conservative play.\n");
+        printf("Consider adjusting fitness function or increasing training duration.\n");
+    }
+    
+    if (strategyCounts[0] + strategyCounts[1] < trainer->populationSize * 0.1) {
+        printf("\nNOTE: Few Dominant/Aggressive strategies emerged.\n");
+        printf("AIs may need more training to develop advanced strategies.\n");
+    }
+    
+    printChar('*', 60);
     printf("\n");
 }
 
@@ -2833,14 +2567,16 @@ void displayFinalEvolutionResults(EvolutionaryTrainer *trainer) {
 
 void trainEvolutionaryAI(int populationSize, int maxGenerations) {
     printf("\n");
-    printRepeatedChar('=', 70);
-    printf("\n");
-    printf("EVOLUTIONARY AI TRAINING\n");
+    printChar('=', 60);
+    printf("\nEVOLUTIONARY AI TRAINING\n");
     printf("Population-based optimization with natural selection\n");
-    printRepeatedChar('=', 70);
+    printChar('=', 60);
     printf("\n");
     
-    // Initialize trainer
+    // Run self-play test first
+    printf("Running pre-training diagnostics...\n");
+    debugSelfPlayGame();
+    
     EvolutionaryTrainer *trainer = createEvolutionaryTrainer(populationSize, maxGenerations);
     if (!trainer) {
         printf("Failed to create evolutionary trainer!\n");
@@ -2848,62 +2584,55 @@ void trainEvolutionaryAI(int populationSize, int maxGenerations) {
     }
     
     trainer->startTime = clock();
-    
-    // Initialize opponent profiles for game playing
-    initializeOpponentProfiles(8); // Max players in any game
-    
-    // Create initial diverse population
+    initializeOpponentProfiles(8);
     initializePopulation(trainer);
     
-    printf("\nStarting evolutionary training...\n");
-    printf("This will take approximately %.1f hours\n", 
-           (populationSize * maxGenerations * 150.0) / 3600.0); // Rough estimate
+    printf("Starting evolution: %d AIs over %d generations\n", populationSize, maxGenerations);
+    printf("Games per generation: %d (reduced for debugging)\n", trainer->gamesPerGeneration);
     
-    // Main evolution loop
+    // Main evolution loop with diagnostics
     for (trainer->currentGeneration = 0; trainer->currentGeneration < trainer->maxGenerations; trainer->currentGeneration++) {
         printf("\n>>> GENERATION %d/%d <<<\n", 
                trainer->currentGeneration + 1, trainer->maxGenerations);
         
-        // 1. Run tournament for this generation
-        runTournamentGeneration(trainer);
+        clock_t genStart = clock();
+        runTournamentGenerationDebug(trainer);
+        clock_t genEnd = clock();
         
-        // 2. Evaluate fitness
+        double genTime = ((double)(genEnd - genStart)) / CLOCKS_PER_SEC;
+        printf("Tournament time: %.2f seconds\n", genTime);
+        
         evaluatePopulationFitness(trainer);
-        
-        // 3. Rank population
         rankPopulation(trainer);
         
-        // 4. Display generation summary
+        // Run diagnostics after first generation
+        if (trainer->currentGeneration == 0) {
+            diagnoseTrainingIssues(trainer);
+        }
+        
         displayGenerationSummary(trainer);
         
-        // 5. Save checkpoint
         if (trainer->currentGeneration % 5 == 0) {
             saveEvolutionCheckpoint(trainer);
         }
         
-        // 6. Evolve to next generation (except on last generation)
         if (trainer->currentGeneration < trainer->maxGenerations - 1) {
             evolvePopulation(trainer);
         }
     }
     
-    // Final results
-    displayFinalEvolutionResults(trainer);
+    displayEvolutionResults(trainer);
     
-    // Save the champion
+    // Save the champion and top 10
     saveNetwork(trainer->population[0].network, "poker_ai_evolved_champion.dat");
-    
-    // Save top 10 AIs
     for (int i = 0; i < 10; i++) {
         char filename[100];
         sprintf(filename, "evolved_champion_%d.dat", i);
         saveNetwork(trainer->population[i].network, filename);
     }
     
-    // Cleanup
     freeEvolutionaryTrainer(trainer);
-    
-    printf("Evolutionary training complete! 🎉\n");
+    printf("Evolutionary training complete!\n");
 }
 
 void saveEvolutionCheckpoint(EvolutionaryTrainer *trainer) {
@@ -2913,4 +2642,58 @@ void saveEvolutionCheckpoint(EvolutionaryTrainer *trainer) {
     saveNetwork(trainer->population[0].network, filename);
     
     printf("Checkpoint saved: %s\n", filename);
+}
+
+
+// Diagnostic function to check training health
+void diagnoseTrainingIssues(EvolutionaryTrainer *trainer) {
+    printf("\n=== TRAINING DIAGNOSTICS ===\n");
+    
+    // Check game counts
+    int totalGames = 0;
+    int aisWith10Plus = 0;
+    int aisWith1Game = 0;
+    double totalCredits = 0;
+    
+    for (int i = 0; i < trainer->populationSize; i++) {
+        Individual *ai = &trainer->population[i];
+        totalGames += ai->games;
+        totalCredits += ai->totalCredits;
+        
+        if (ai->games >= 10) aisWith10Plus++;
+        if (ai->games == 1) aisWith1Game++;
+    }
+    
+    printf("Total games played: %d\n", totalGames);
+    printf("Average games per AI: %.2f (target: %d)\n", 
+           (double)totalGames / trainer->populationSize, trainer->gamesPerGeneration);
+    printf("AIs with 10+ games: %d/%d (%.1f%%)\n", 
+           aisWith10Plus, trainer->populationSize, (aisWith10Plus * 100.0) / trainer->populationSize);
+    printf("AIs with only 1 game: %d/%d (%.1f%%)\n", 
+           aisWith1Game, trainer->populationSize, (aisWith1Game * 100.0) / trainer->populationSize);
+    printf("Average total credits: %.2f\n", totalCredits / trainer->populationSize);
+    
+    // Check for impossible values
+    int impossibleWinRates = 0;
+    int impossibleCredits = 0;
+    
+    for (int i = 0; i < trainer->populationSize; i++) {
+        Individual *ai = &trainer->population[i];
+        if (ai->winRate > 1.0 || (ai->winRate == 1.0 && ai->games > 1)) {
+            impossibleWinRates++;
+        }
+        if (ai->avgCredits < 0 || ai->avgCredits > STARTING_CREDITS * 5) {
+            impossibleCredits++;
+        }
+    }
+    
+    printf("Impossible win rates: %d\n", impossibleWinRates);
+    printf("Impossible credit values: %d\n", impossibleCredits);
+    
+    // Check tournament system
+    printf("Tournament tables: %d\n", trainer->numTables);
+    printf("Players per table: 4\n");
+    printf("Expected table games per round: %d\n", trainer->numTables);
+    
+    printf("=== END DIAGNOSTICS ===\n\n");
 }
