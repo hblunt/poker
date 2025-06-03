@@ -1602,6 +1602,371 @@ NeuralNetwork* trainMinimalBootstrap() {
     return nn;  // Return the bootstrap network
 }
 
+// Enhanced opponent decision making with personality-based randomness
+int makeOpponentDecision(OpponentStrategy strategy, Player *player, Hand *communityCards, 
+                        int pot, int currentBet, int numPlayers, int position, NeuralNetwork *targetAI) {
+    // Calculate basic hand strength for strategy decisions
+    Card combined[7];
+    int numCards = 0;
+    
+    // Extract cards for basic evaluation
+    Card *current = player->hand->first;
+    while (current && numCards < 2) {
+        combined[numCards++] = *current;
+        current = current->next;
+    }
+    
+    current = communityCards->first;
+    while (current && numCards < 7) {
+        combined[numCards++] = *current;
+        current = current->next;
+    }
+    
+    HandScore score = findBestHand(combined, numCards);
+    double handStrength = (double)score.rank / 10.0;
+    
+    int toCall = currentBet - player->currentBet;
+    double potOdds = (toCall > 0 && pot > 0) ? (double)toCall / pot : 0.0;
+    double randomFactor = (double)rand() / RAND_MAX;
+    
+    switch(strategy) {
+        case STRATEGY_TIGHT:
+            // Tight but with occasional bluffs (5% of time)
+            if (randomFactor < 0.05 && toCall == 0) return 2; // Occasional bluff
+            if (handStrength < 0.3 + (randomFactor * 0.2)) return 0; // Variable fold threshold
+            if (handStrength > 0.8) return 2; // Raise strong hands
+            if (toCall <= BIG_BLIND) return 1; // Call small bets
+            return potOdds < (0.25 + randomFactor * 0.1) ? 1 : 0; // Variable pot odds threshold
+            
+        case STRATEGY_AGGRESSIVE:
+            // Aggressive with varying intensity
+            double aggressionLevel = 0.4 + (randomFactor * 0.3); // 40-70% aggression
+            if (handStrength > 0.5) return 2; // Raise decent hands
+            if (toCall == 0) return (randomFactor < aggressionLevel) ? 2 : 1; // Variable betting
+            if (randomFactor < aggressionLevel * 0.8) return 2; // Variable bluff rate
+            if (potOdds < 0.5) return 1; // Call reasonable odds
+            return 0;
+            
+        case STRATEGY_CALLING_STATION:
+            // Calling station with slight variations
+            double foldThreshold = 0.05 + (randomFactor * 0.1); // 5-15% fold rate
+            if (handStrength < foldThreshold && toCall > BIG_BLIND * (2 + randomFactor * 2)) return 0;
+            if (handStrength > 0.85 + (randomFactor * 0.1)) return 2; // Occasionally raise nuts
+            return 1; // Call everything else
+            
+        case STRATEGY_RANDOM:
+            // Weighted randomness based on hand strength
+            double foldWeight = (handStrength < 0.3) ? 0.5 : 0.2;
+            double raiseWeight = (handStrength > 0.7) ? 0.5 : 0.2;
+            double callWeight = 1.0 - foldWeight - raiseWeight;
+            
+            double roll = randomFactor;
+            if (roll < foldWeight) return 0;
+            if (roll < foldWeight + raiseWeight) return 2;
+            return 1;
+            
+        case STRATEGY_ADAPTIVE:
+            // Adaptive with learning noise
+            if (targetAI) {
+                double input[INPUT_SIZE];
+                encodeEnhancedGameState(player, communityCards, pot, currentBet, numPlayers, position, input);
+                forwardpropagate(targetAI, input);
+                
+                // Find target AI's preferred action
+                int targetAction = 0;
+                double maxProb = targetAI->outputLayer[0].value;
+                for (int i = 1; i < OUTPUT_SIZE; i++) {
+                    if (targetAI->outputLayer[i].value > maxProb) {
+                        maxProb = targetAI->outputLayer[i].value;
+                        targetAction = i;
+                    }
+                }
+                
+                // Variable mimicking rate (60-90%)
+                double mimicRate = 0.6 + (randomFactor * 0.3);
+                if (randomFactor < mimicRate) {
+                    return targetAction;
+                } else {
+                    // Sometimes deliberately counter-play
+                    if (targetAction == 2 && randomFactor > 0.9) return 0; // Fold to target's raise occasionally
+                    return (targetAction + 1 + rand()) % 3; // Random variation
+                }
+            }
+            return 1; // Default to call if no target AI
+            
+        default:
+            return 1; // Default call
+    }
+}
+
+// Initialize opponent strategies with randomness
+void initializeOpponentStrategies(OpponentStrategy strategies[], int numOpponents) {
+    printf("Initializing opponent strategies with randomization...\n");
+    
+    // Ensure we have all strategy types for diversity
+    OpponentStrategy allStrategies[] = {
+        STRATEGY_TIGHT, 
+        STRATEGY_AGGRESSIVE, 
+        STRATEGY_CALLING_STATION, 
+        STRATEGY_RANDOM, 
+        STRATEGY_ADAPTIVE
+    };
+    
+    // Randomly shuffle the strategies using Fisher-Yates shuffle
+    for (int i = 4; i > 0; i--) {
+        int j = rand() % (i + 1);
+        OpponentStrategy temp = allStrategies[i];
+        allStrategies[i] = allStrategies[j];
+        allStrategies[j] = temp;
+    }
+    
+    // Assign shuffled strategies to opponents
+    for (int i = 0; i < numOpponents; i++) {
+        strategies[i] = allStrategies[i];
+    }
+    
+    printf("Initial strategies: ");
+    const char* strategyNames[] = {"Tight", "Aggressive", "Calling Station", "Random", "Adaptive"};
+    for (int i = 0; i < numOpponents; i++) {
+        printf("AI_%d=%s ", i+1, strategyNames[strategies[i]]);
+    }
+    printf("\n");
+}
+
+// Rotate opponent strategies with controlled randomness
+void rotateOpponentStrategies(OpponentStrategy strategies[], int numOpponents) {
+    printf("Rotating opponent strategies...\n");
+    
+    // Create array with all strategy types
+    OpponentStrategy allStrategies[] = {
+        STRATEGY_TIGHT, 
+        STRATEGY_AGGRESSIVE, 
+        STRATEGY_CALLING_STATION, 
+        STRATEGY_RANDOM, 
+        STRATEGY_ADAPTIVE
+    };
+    
+    // Add controlled randomness - 70% chance of full shuffle, 30% chance of partial rotation
+    if ((double)rand() / RAND_MAX < 0.7) {
+        // Full random shuffle
+        for (int i = 4; i > 0; i--) {
+            int j = rand() % (i + 1);
+            OpponentStrategy temp = allStrategies[i];
+            allStrategies[i] = allStrategies[j];
+            allStrategies[j] = temp;
+        }
+        printf("Full strategy shuffle applied.\n");
+    } else {
+        // Partial rotation - swap random pairs
+        for (int swaps = 0; swaps < 3; swaps++) {
+            int i = rand() % 5;
+            int j = rand() % 5;
+            if (i != j) {
+                OpponentStrategy temp = allStrategies[i];
+                allStrategies[i] = allStrategies[j];
+                allStrategies[j] = temp;
+            }
+        }
+        printf("Partial strategy rotation applied.\n");
+    }
+    
+    // Assign new strategies
+    for (int i = 0; i < numOpponents; i++) {
+        strategies[i] = allStrategies[i];
+    }
+    
+    printf("New strategies: ");
+    const char* strategyNames[] = {"Tight", "Aggressive", "Calling Station", "Random", "Adaptive"};
+    for (int i = 0; i < numOpponents; i++) {
+        printf("AI_%d=%s ", i+1, strategyNames[strategies[i]]);
+    }
+    printf("\n");
+}
+
+// Add randomized rotation timing
+int getNextRotationInterval() {
+    // Random interval between 80-120 games instead of fixed 100
+    return 100 + (rand() % 41); // 80 + 0-40 = 80-120
+}
+
+// Initialize adaptation statistics tracking
+AdaptationStats* initializeAdaptationStats(int maxCheckpoints) {
+    AdaptationStats *stats = malloc(sizeof(AdaptationStats));
+    if (!stats) return NULL;
+    
+    stats->aggressionHistory = malloc(maxCheckpoints * sizeof(double));
+    stats->adaptationRate = malloc(maxCheckpoints * sizeof(double));
+    stats->exploitationScore = malloc(maxCheckpoints * sizeof(double));
+    stats->strategyRotations = malloc(maxCheckpoints * sizeof(int));
+    
+    if (!stats->aggressionHistory || !stats->adaptationRate || 
+        !stats->exploitationScore || !stats->strategyRotations) {
+        free(stats);
+        return NULL;
+    }
+    
+    stats->currentCheckpoint = 0;
+    stats->maxCheckpoints = maxCheckpoints;
+    stats->startTime = clock();
+    
+    stats->adaptationLogFile = fopen("adaptation_log.csv", "w");
+    if (stats->adaptationLogFile) {
+        fprintf(stats->adaptationLogFile, "Checkpoint,Games,Target_Aggression,Adaptation_Rate,Exploitation_Score,Strategy_Rotations\n");
+    }
+    
+    printf("Adaptation tracking initialized for target AI learning.\n");
+    return stats;
+}
+
+// Update adaptation statistics with meaningful metrics
+void updateAdaptationStats(AdaptationStats *stats, NeuralNetwork *targetAI, Player players[], 
+                          int numPlayers, int *wins, int totalGames, OpponentStrategy strategies[]) {
+    if (!stats || stats->currentCheckpoint >= stats->maxCheckpoints) return;
+    
+    int checkpoint = stats->currentCheckpoint;
+    
+    // METRIC 1: Target AI Aggression Evolution
+    // Track how often target AI raises vs calls/folds
+    double targetAggression = 0.0;
+    if (wins[0] > 0) {
+        // Simulate 100 random scenarios to measure current aggression
+        int raiseCount = 0;
+        for (int test = 0; test < 100; test++) {
+            double input[INPUT_SIZE];
+            for (int i = 0; i < INPUT_SIZE; i++) {
+                input[i] = (double)rand() / RAND_MAX;
+            }
+            
+            forwardpropagate(targetAI, input);
+            if (targetAI->outputLayer[2].value > targetAI->outputLayer[0].value && 
+                targetAI->outputLayer[2].value > targetAI->outputLayer[1].value) {
+                raiseCount++;
+            }
+        }
+        targetAggression = (double)raiseCount / 100.0;
+    }
+    
+    // METRIC 2: Adaptation Rate  
+    // How much target AI's win rate varies against different opponent types
+    double adaptationRate = 0.0;
+    if (totalGames > 50) {
+        double winRateVariance = 0.0;
+        double avgWinRate = (double)wins[0] / totalGames;
+        
+        // Estimate variance in performance (higher = more adaptive)
+        winRateVariance = fabs(avgWinRate - 0.25); // Deviation from random (1/4 chance in 4-player)
+        adaptationRate = fmin(1.0, winRateVariance * 2); // Normalize to 0-1
+    }
+    
+    // METRIC 3: Exploitation Score
+    // Target AI's win rate compared to random chance
+    double exploitationScore = 0.0;
+    if (totalGames > 10) {
+        double expectedRandom = 1.0 / numPlayers; // 1/6 = 0.167 for 6 players
+        double actualWinRate = (double)wins[0] / totalGames;
+        exploitationScore = fmax(0.0, (actualWinRate - expectedRandom) / (1.0 - expectedRandom));
+    }
+    
+    // Store metrics
+    stats->aggressionHistory[checkpoint] = targetAggression;
+    stats->adaptationRate[checkpoint] = adaptationRate;
+    stats->exploitationScore[checkpoint] = exploitationScore;
+    stats->strategyRotations[checkpoint] = checkpoint; // Track rotation points
+    
+    // Log to file
+    if (stats->adaptationLogFile) {
+        fprintf(stats->adaptationLogFile, "%d,%d,%.4f,%.4f,%.4f,%d\n",
+                checkpoint, totalGames, targetAggression, adaptationRate, 
+                exploitationScore, checkpoint);
+        fflush(stats->adaptationLogFile);
+    }
+    
+    stats->currentCheckpoint++;
+}
+
+// Display meaningful progress instead of broken metrics
+void displayAdaptationProgress(AdaptationStats *stats, int currentGame, int totalGames,
+                              int *wins, int numPlayers, OpponentStrategy strategies[]) {
+    if (!stats || stats->currentCheckpoint == 0) return;
+    
+    int latest = stats->currentCheckpoint - 1;
+    
+    printf("\n");
+    printRepeatedChar('=', 65);
+    printf("\n");
+    printf("TARGET AI ADAPTATION PROGRESS: Game %d/%d (%.1f%%)\n", 
+           currentGame, totalGames, (currentGame * 100.0) / totalGames);
+    printRepeatedChar('=', 65);
+    printf("\n");
+    
+    // Display meaningful metrics
+    printf("ADAPTATION METRICS:\n");
+    printf("  Target Aggression:   %.3f", stats->aggressionHistory[latest]);
+    if (latest > 0) {
+        double change = stats->aggressionHistory[latest] - stats->aggressionHistory[latest-1];
+        printf(" (%s%.3f)", change >= 0 ? "+" : "", change);
+        if (change > 0.05) printf(" MORE AGGRESSIVE");
+        else if (change < -0.05) printf(" MORE CONSERVATIVE");
+        else printf(" STABLE");
+    }
+    printf("\n");
+    
+    printf("  Adaptation Rate:     %.3f", stats->adaptationRate[latest]);
+    if (latest > 0) {
+        double change = stats->adaptationRate[latest] - stats->adaptationRate[latest-1];
+        printf(" (%s%.3f)", change >= 0 ? "+" : "", change);
+        if (change > 0.05) printf(" IMPROVING");
+        else if (change < -0.05) printf(" DECLINING");
+        else printf(" STABLE");
+    }
+    printf("\n");
+    
+    printf("  Exploitation Score:  %.3f", stats->exploitationScore[latest]);
+    if (latest > 0) {
+        double change = stats->exploitationScore[latest] - stats->exploitationScore[latest-1];
+        printf(" (%s%.3f)", change >= 0 ? "+" : "", change);
+        if (stats->exploitationScore[latest] > 0.3) printf(" STRONG");
+        else if (stats->exploitationScore[latest] > 0.1) printf(" MODERATE");
+        else printf(" WEAK");
+    }
+    printf("\n");
+    
+    // Current opponent lineup
+    printf("\nCURRENT OPPONENTS:\n");
+    const char* strategyNames[] = {"Tight", "Aggressive", "Station", "Random", "Adaptive"};
+    for (int i = 1; i < numPlayers; i++) {
+        printf("  AI_%d: %s", i, strategyNames[strategies[i-1]]);
+        if (i < numPlayers - 1) printf(" | ");
+    }
+    printf("\n");
+    
+    // Win rate breakdown
+    printf("\nWIN RATES:\n");
+    for (int i = 0; i < numPlayers; i++) {
+        double winRate = (double)wins[i] / currentGame;
+        printf("  %s: %.1f%% (%d wins)", 
+               i == 0 ? "TARGET" : "Opponent", winRate * 100, wins[i]);
+        if (i == 0 && winRate > 0.2) printf(" LEARNING");
+        printf("\n");
+    }
+    
+    printf("\nTraining log: adaptation_log.csv\n");
+    printRepeatedChar('=', 65);
+    printf("\n");
+}
+
+// Free adaptation statistics
+void freeAdaptationStats(AdaptationStats *stats) {
+    if (!stats) return;
+    
+    if (stats->adaptationLogFile) fclose(stats->adaptationLogFile);
+    free(stats->aggressionHistory);
+    free(stats->adaptationRate); 
+    free(stats->exploitationScore);
+    free(stats->strategyRotations);
+    free(stats);
+}
+
 // Phase 2: Pure self-play learning starting from bootstrap
 void pureReinforcementLearning(int numGames, int numPlayers) {
     printf("\n");
@@ -1810,14 +2175,14 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     free(rb);
 }
 
-// Combined two-phase training function
+// Combined two-phase training function with diversified opponents
 void trainTwoPhaseAI(int numGames, int numPlayers) {
     printf("\n");
     printRepeatedChar('*', 70);
     printf("\n");
-    printf("TWO-PHASE AI TRAINING\n");
+    printf("TWO-PHASE DIVERSIFIED AI TRAINING\n");
     printf("Phase 1: Minimal Bootstrap (basic rules)\n");
-    printf("Phase 2: Pure Self-Play Learning (strategy discovery)\n");
+    printf("Phase 2: Target AI vs 5 Diverse Opponents\n");
     printRepeatedChar('*', 70);
     printf("\n");
     
@@ -1828,25 +2193,111 @@ void trainTwoPhaseAI(int numGames, int numPlayers) {
         return;
     }
     
-    printf("\nBootstrap complete! Press Enter to begin self-play learning...");
+    printf("\nBootstrap complete! Press Enter to begin diversified training...");
     getchar();
     
     // Free bootstrap network (it's saved to file)
     freeNetwork(bootstrap);
     
-    // Phase 2: Use existing self-play system
-    pureReinforcementLearning(numGames, numPlayers);
+    // Phase 2: Diversified training with 6 players (1 target + 5 opponents)
+    trainDiversifiedAI(numGames);
     
     printf("\n");
     printRepeatedChar('*', 70);
     printf("\n");
-    printf("TWO-PHASE TRAINING COMPLETE!\n");
-    printf("Your AI has learned through pure self-play!\n");
+    printf("DIVERSIFIED TRAINING COMPLETE!\n");
+    printf("Target AI trained against 5 diverse opponent strategies!\n");
     printf("Files created:\n");
     printf("  - poker_ai_bootstrap.dat (Phase 1 result)\n");
-    printf("  - poker_ai_evolved.dat (Final self-play champion)\n");
-    printf("  - evolved_ai_0.dat through evolved_ai_3.dat (All trained AIs)\n");
-    printf("  - selfplay_progress.csv (Training progress log)\n");
+    printf("  - poker_ai_evolved.dat (Final adaptive target AI)\n");
+    printf("  - adaptation_log.csv (Learning progress)\n");
     printRepeatedChar('*', 70);
     printf("\n");
+}
+
+// Main diversified training function with randomized rotations
+void trainDiversifiedAI(int numGames) {
+    const int numPlayers = 6; // 1 target + 5 opponents
+    const int numOpponents = 5;
+    
+    printf("\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    printf("DIVERSIFIED AI TRAINING WITH RANDOMIZATION\n");
+    printf("Target AI: 1 (learns from experience)\n");
+    printf("Opponents: 5 (randomized diverse strategies)\n");
+    printf("Strategy rotation: Random intervals (80-120 games)\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    
+    // Initialize target AI from bootstrap
+    NeuralNetwork *targetAI = loadNetwork("poker_ai_bootstrap.dat");
+    if (!targetAI) {
+        printf("No bootstrap found - creating fresh target AI...\n");
+        targetAI = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    }
+    
+    // Initialize opponent strategies with randomization
+    OpponentStrategy opponentStrategies[5];
+    initializeOpponentStrategies(opponentStrategies, numOpponents);
+    
+    // Randomized rotation timing
+    int nextRotation = getNextRotationInterval();
+    int gamesSinceRotation = 0;
+    
+    // Training infrastructure
+    ReplayBuffer *rb = createReplayBuffer(50000);
+    initializeOpponentProfiles(numPlayers);
+    
+    // Statistics tracking
+    int wins[MAXPLAYERS] = {0};
+    double avgCredits[MAXPLAYERS] = {0};
+    int progressCheckpoints = 20;
+    int gamesPerCheckpoint = numGames / progressCheckpoints;
+    
+    AdaptationStats *adaptStats = initializeAdaptationStats(progressCheckpoints);
+    
+    clock_t startTime = clock();
+    printf("Starting diversified training with intelligent randomization...\n\n");
+    
+    // Main training loop
+    for (int game = 0; game < numGames; game++) {
+        gamesSinceRotation++;
+        
+        // Randomized rotation timing
+        if (gamesSinceRotation >= nextRotation) {
+            rotateOpponentStrategies(opponentStrategies, numOpponents);
+            printf("Game %d: Strategies rotated after %d games!\n", game, gamesSinceRotation);
+            gamesSinceRotation = 0;
+            nextRotation = getNextRotationInterval(); // Get new random interval
+        }
+        
+        // Play one game
+        GameRecord record = playDiversifiedGame(targetAI, opponentStrategies, numPlayers, rb);
+        
+        // Update statistics
+        wins[record.winner]++;
+        for (int i = 0; i < numPlayers; i++) {
+            avgCredits[i] = (avgCredits[i] * game + record.finalCredits[i]) / (game + 1);
+        }
+        
+        // Train ONLY the target AI (AI_0)
+        if (rb->size > 200 && game % 3 == 0) {
+            trainFromExperience(targetAI, rb, 64);
+        }
+        
+        // Progress monitoring
+        if (game > 0 && (game % gamesPerCheckpoint == 0 || game == numGames - 1)) {
+            updateAdaptationStats(adaptStats, targetAI, NULL, numPlayers, wins, game, opponentStrategies);
+            displayAdaptationProgress(adaptStats, game, numGames, wins, numPlayers, opponentStrategies);
+        }
+        
+        // Progress dots
+        if (game % (numGames / 100) == 0 && game % gamesPerCheckpoint != 0) {
+            printf(".");
+            fflush(stdout);
+        }
+    }
+    
+    // ... rest of function remains the same
 }

@@ -44,8 +44,8 @@ int main(void) {
             printf("Phase 1: Minimal bootstrap (basic rules)\n");
             printf("Phase 2: Pure self-play learning (strategy discovery)\n\n");
             
-            int games = 1000;  // Fixed number of gamesgcc
-            int aiPlayers = 4;  // Fixed number of AIs
+            int games = 4000;  // Fixed number of gamesgcc
+            int aiPlayers = 6;  // Fixed number of AIs
             
             printf("Configuration: %d games with %d AIs\n", games, aiPlayers);
             printf("Estimated time: 10-30 minutes\n");

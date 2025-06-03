@@ -77,12 +77,22 @@ int enhancedSelfPlayDecision(NeuralNetwork *nn, Player *player, Hand *communityC
 bool enhancedSelfPlayPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
                                     Hand* communityCards, int cardsRevealed, int startPosition, 
                                     int *currentBetAmount, NeuralNetwork **networks,
-                                    ReplayBuffer *rb, int *handDecisions);
+                                    ReplayBuffer *rb, int *handDecisions,
+                                    OpponentStrategy *strategies);
 
 // Enhanced self-play game management
 int playEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **networks,
                            ReplayBuffer *rb, GameRecord *record);
 GameRecord playEnhancedSelfPlayGame(NeuralNetwork **networks, int numPlayers, ReplayBuffer *rb);
+
+// new
+// Diversified training functions
+GameRecord playDiversifiedGame(NeuralNetwork *targetAI, OpponentStrategy strategies[], 
+                              int numPlayers, ReplayBuffer *rb);
+int playDiversifiedHand(Player players[], int numPlayers, NeuralNetwork **networks,
+                       OpponentStrategy strategies[], ReplayBuffer *rb);
+
+void updateTargetAIRewards(ReplayBuffer *rb, bool targetWon, GameRecord *record);
 
 // Enhanced reward system
 void updateEnhancedRewards(ReplayBuffer *rb, int startIndex, GameRecord *record);

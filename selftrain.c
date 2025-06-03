@@ -51,6 +51,227 @@ SelfPlayStats* initializeSelfPlayStats(int maxCheckpoints) {
     return stats;
 }
 
+// Wrapper for diversified training using existing infrastructure
+GameRecord playDiversifiedGame(NeuralNetwork *targetAI, OpponentStrategy strategies[], 
+                              int numPlayers, ReplayBuffer *rb) {
+    // Create mixed network array
+    NeuralNetwork **mixedNetworks = malloc(numPlayers * sizeof(NeuralNetwork*));
+    mixedNetworks[0] = targetAI;  // Only target AI has a network
+    for (int i = 1; i < numPlayers; i++) {
+        mixedNetworks[i] = NULL;  // Opponents use strategies
+    }
+    
+    // Create players
+    Player players[MAXPLAYERS];
+    for (int i = 0; i < numPlayers; i++) {
+        if (i == 0) {
+            sprintf(players[i].name, "TARGET_AI");
+        } else {
+            sprintf(players[i].name, "OPP_%d", i);
+        }
+        players[i].credits = STARTING_CREDITS;
+        players[i].status = ACTIVE;
+        players[i].hand = NULL;
+        players[i].dealer = (i == 0);
+        players[i].currentBet = 0;
+    }
+    
+    GameRecord record = {0};
+    record.numPlayers = numPlayers;
+    
+    int handsPlayed = 0;
+    int maxHands = 30;
+    
+    // Play until game ends
+    while (handsPlayed < maxHands) {
+        int activePlayers = 0;
+        int lastActive = -1;
+        
+        for (int i = 0; i < numPlayers; i++) {
+            if (players[i].credits > 0) {
+                activePlayers++;
+                lastActive = i;
+            }
+        }
+        
+        if (activePlayers <= 1) {
+            record.winner = lastActive;
+            break;
+        }
+        
+        // Use existing hand function with diversified mode
+        int handWinner = playDiversifiedHand(players, numPlayers, mixedNetworks, strategies, rb);
+        handsPlayed++;
+        
+        // Early termination check
+        for (int i = 0; i < numPlayers; i++) {
+            if (players[i].credits > STARTING_CREDITS * 4) {
+                record.winner = i;
+                goto game_end;
+            }
+        }
+    }
+    
+    game_end:
+    record.totalHands = handsPlayed;
+    
+    // Record final credits
+    for (int i = 0; i < numPlayers; i++) {
+        record.finalCredits[i] = players[i].credits;
+    }
+    
+    // Find winner if not determined
+    if (record.winner == -1) {
+        int maxCredits = 0;
+        for (int i = 0; i < numPlayers; i++) {
+            if (players[i].credits > maxCredits) {
+                maxCredits = players[i].credits;
+                record.winner = i;
+            }
+        }
+    }
+    
+    // Update rewards for target AI
+    updateTargetAIRewards(rb, record.winner == 0, &record);
+    
+    free(mixedNetworks);
+    return record;
+}
+
+// Helper function for target AI reward updates
+void updateTargetAIRewards(ReplayBuffer *rb, bool targetWon, GameRecord *record) {
+    double reward = targetWon ? 0.5: -0.1;
+    
+    // Update recent experiences for target AI (player 0)
+    int expCount = 0;
+    for (int i = rb->size - 1; i >= 0 && expCount < 8; i--) {
+        Experience *exp = &rb->buffer[i];
+        if (exp->playerIndex == 0 && exp->reward == 0) {
+            exp->reward = reward;
+            exp->handOutcome = targetWon ? 1 : 0;
+            expCount++;
+        }
+    }
+}
+
+// Clean diversified hand function
+int playDiversifiedHand(Player players[], int numPlayers, NeuralNetwork **networks,
+                       OpponentStrategy strategies[], ReplayBuffer *rb) {
+    int pot = 0;
+    int cardsRevealed = 0;
+    bool gameOver = false;
+    int handDecisions[MAXPLAYERS] = {0};
+    
+    // Setup (reuse existing logic)
+    for (int i = 0; i < numPlayers; i++) {
+        if (players[i].credits > 0 && players[i].status != NOT_PLAYING) {
+            players[i].status = ACTIVE;
+        }
+    }
+    
+    // Find dealer
+    int currentDealer = -1;
+    for (int i = 0; i < numPlayers; i++) {
+        if (players[i].dealer) {
+            currentDealer = i;
+            break;
+        }
+    }
+    
+    if (currentDealer == -1) {
+        for (int i = 0; i < numPlayers; i++) {
+            if (players[i].status == ACTIVE) {
+                players[i].dealer = true;
+                currentDealer = i;
+                break;
+            }
+        }
+    }
+    
+    // Create deck and deal
+    Hand *deck = createDeck(1, 1);
+    Hand *communityCards = createHand();
+    
+    // Post blinds
+    int smallBlindPos = findNextActivePlayer(players, numPlayers, currentDealer, 1);
+    int bigBlindPos = findNextActivePlayer(players, numPlayers, smallBlindPos, 1);
+    
+    players[smallBlindPos].credits -= SMALL_BLIND;
+    players[smallBlindPos].currentBet = SMALL_BLIND;
+    pot += SMALL_BLIND;
+    
+    players[bigBlindPos].credits -= BIG_BLIND;
+    players[bigBlindPos].currentBet = BIG_BLIND;
+    pot += BIG_BLIND;
+    
+    dealHand(players, numPlayers, deck, communityCards);
+    
+    // Betting rounds - CLEAN: just pass strategies, no boolean flag
+    int currentBetAmount = BIG_BLIND;
+    int startPosition = findNextActivePlayer(players, numPlayers, bigBlindPos, 1);
+    
+    // Pre-flop
+    gameOver = enhancedSelfPlayPredictionRound(players, numPlayers, &pot, 1, communityCards,
+                                              cardsRevealed, startPosition, &currentBetAmount,
+                                              networks, rb, handDecisions, strategies);
+    
+    // Flop
+    if (!gameOver) {
+        resetCurrentBets(players, numPlayers);
+        currentBetAmount = 0;
+        cardsRevealed = 3;
+        startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1);
+        gameOver = enhancedSelfPlayPredictionRound(players, numPlayers, &pot, 2, communityCards,
+                                                  cardsRevealed, startPosition, &currentBetAmount,
+                                                  networks, rb, handDecisions, strategies);
+    }
+    
+    // Turn
+    if (!gameOver) {
+        resetCurrentBets(players, numPlayers);
+        currentBetAmount = 0;
+        cardsRevealed = 4;
+        gameOver = enhancedSelfPlayPredictionRound(players, numPlayers, &pot, 3, communityCards,
+                                                  cardsRevealed, startPosition, &currentBetAmount,
+                                                  networks, rb, handDecisions, strategies);
+    }
+    
+    // River
+    if (!gameOver) {
+        resetCurrentBets(players, numPlayers);
+        currentBetAmount = 0;
+        cardsRevealed = 5;
+        gameOver = enhancedSelfPlayPredictionRound(players, numPlayers, &pot, 4, communityCards,
+                                                  cardsRevealed, startPosition, &currentBetAmount,
+                                                  networks, rb, handDecisions, strategies);
+    }
+    
+    // Determine winner and cleanup
+    int handWinner = determineWinner(players, numPlayers, communityCards);
+    if (handWinner >= 0) {
+        players[handWinner].credits += pot;
+    }
+    
+    // Move dealer
+    players[currentDealer].dealer = false;
+    int nextDealer = findNextActivePlayer(players, numPlayers, currentDealer, 1);
+    if (nextDealer >= 0) {
+        players[nextDealer].dealer = true;
+    }
+    
+    // Cleanup
+    freeHand(deck, 1);
+    freeHand(communityCards, 1);
+    for (int i = 0; i < numPlayers; i++) {
+        if (players[i].hand) {
+            freeHand(players[i].hand, 1);
+            players[i].hand = NULL;
+        }
+    }
+    
+    return handWinner;
+}
+
 double calculateExperienceLoss(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize) {
     if (!nn || !rb || rb->size < 10) return 0.0;  // Need minimum samples
     
@@ -650,11 +871,12 @@ int enhancedSelfPlayDecision(NeuralNetwork *nn, Player *player, Hand *communityC
     return decision;
 }
 
-// Enhanced self-play prediction round
+// Enhanced self-play prediction round with cleaner strategy support
 bool enhancedSelfPlayPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
                                     Hand* communityCards, int cardsRevealed, int startPosition, 
                                     int *currentBetAmount, NeuralNetwork **networks,
-                                    ReplayBuffer *rb, int *handDecisions) {
+                                    ReplayBuffer *rb, int *handDecisions,
+                                    OpponentStrategy *strategies) {
     int activePlayers = 0;
     int currentPlayer = startPosition;
     int playersActed = 0;
@@ -681,20 +903,32 @@ bool enhancedSelfPlayPredictionRound(Player players[], int numPlayers, int *pot,
         }
         
         int toCall = *currentBetAmount - players[currentPlayer].currentBet;
+        int decision;
         
-        // Enhanced decision making
-        int decision = enhancedSelfPlayDecision(networks[currentPlayer], &players[currentPlayer],
+        // CLEAN LOGIC: Let the data structures determine behavior
+        if (networks[currentPlayer] != NULL) {
+            // Player has a neural network - use it (works for both regular and diversified)
+            decision = enhancedSelfPlayDecision(networks[currentPlayer], &players[currentPlayer],
                                               communityCards, *pot, *currentBetAmount,
                                               activePlayers, currentPlayer, rb, currentPlayer);
+        } else if (strategies != NULL && currentPlayer > 0) {
+            // No network but strategies exist - use strategy-based decision
+            decision = makeOpponentDecision(strategies[currentPlayer - 1], &players[currentPlayer],
+                                          communityCards, *pot, *currentBetAmount,
+                                          activePlayers, currentPlayer, networks[0]);
+        } else {
+            // Fallback (shouldn't happen in normal operation)
+            decision = 1; // Default to call
+        }
         
         handDecisions[currentPlayer] = decision;
         
-        // Update opponent profile if function exists
+        // Update opponent profile
         bool voluntaryAction = (decision != 0 || toCall == 0);
         updateOpponentProfile(currentPlayer, decision, voluntaryAction, 
                             players[currentPlayer].currentBet, *pot);
         
-        // Execute decision
+        // Execute decision (existing code unchanged)
         switch(decision) {
             case 0: // Fold
                 players[currentPlayer].status = FOLDED;
@@ -712,7 +946,6 @@ bool enhancedSelfPlayPredictionRound(Player players[], int numPlayers, int *pot,
                 break;
                 
             case 2: // Raise
-                // Enhanced raise sizing
                 int baseRaise = BIG_BLIND * 2;
                 if (roundNum == 1) baseRaise = BIG_BLIND * 3;
                 if (cardsRevealed >= 4) baseRaise = *pot / 2;
@@ -801,8 +1034,8 @@ int playEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **n
     
     // Pre-flop
     gameOver = enhancedSelfPlayPredictionRound(players, numPlayers, &pot, 1, communityCards,
-                                              cardsRevealed, startPosition, &currentBetAmount,
-                                              networks, rb, handDecisions);
+                                          cardsRevealed, startPosition, &currentBetAmount,
+                                          networks, rb, handDecisions, NULL);
     
     if (!gameOver) {
         // Flop
@@ -811,8 +1044,8 @@ int playEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **n
         cardsRevealed = 3;
         startPosition = findNextActivePlayer(players, numPlayers, currentDealer, 1);
         gameOver = enhancedSelfPlayPredictionRound(players, numPlayers, &pot, 2, communityCards,
-                                                  cardsRevealed, startPosition, &currentBetAmount,
-                                                  networks, rb, handDecisions);
+                                          cardsRevealed, startPosition, &currentBetAmount,
+                                          networks, rb, handDecisions, NULL);
     }
     
     if (!gameOver) {
@@ -821,8 +1054,8 @@ int playEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **n
         currentBetAmount = 0;
         cardsRevealed = 4;
         gameOver = enhancedSelfPlayPredictionRound(players, numPlayers, &pot, 3, communityCards,
-                                                  cardsRevealed, startPosition, &currentBetAmount,
-                                                  networks, rb, handDecisions);
+                                          cardsRevealed, startPosition, &currentBetAmount,
+                                          networks, rb, handDecisions, NULL);
     }
     
     if (!gameOver) {
@@ -831,8 +1064,8 @@ int playEnhancedSelfPlayHand(Player players[], int numPlayers, NeuralNetwork **n
         currentBetAmount = 0;
         cardsRevealed = 5;
         gameOver = enhancedSelfPlayPredictionRound(players, numPlayers, &pot, 4, communityCards,
-                                                  cardsRevealed, startPosition, &currentBetAmount,
-                                                  networks, rb, handDecisions);
+                                          cardsRevealed, startPosition, &currentBetAmount,
+                                          networks, rb, handDecisions, NULL);
     }
     
     // Determine winner

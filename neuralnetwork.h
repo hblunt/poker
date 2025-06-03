@@ -88,6 +88,28 @@ typedef struct {
     int stagnationCount;        // Epochs without improvement
 } TrainingStats;
 
+// Opponent strategy types for diversified training
+typedef enum {
+    STRATEGY_TIGHT,           // Only plays premium hands
+    STRATEGY_AGGRESSIVE,      // Frequent raises and bluffs  
+    STRATEGY_CALLING_STATION, // Rarely folds, calls most bets
+    STRATEGY_RANDOM,          // Unpredictable decisions
+    STRATEGY_ADAPTIVE,        // Mimics target AI behavior
+    STRATEGY_NEURAL           // Uses neural network (target AI only)
+} OpponentStrategy;
+
+// Target AI adaptation metrics (replaces broken loss metrics)
+typedef struct {
+    double *aggressionHistory;     // Target AI's raise frequency over time
+    double *adaptationRate;        // How much strategy changes vs opponent types
+    double *exploitationScore;     // Success rate against each opponent type
+    int *strategyRotations;        // Track when opponent strategies changed
+    int currentCheckpoint;
+    int maxCheckpoints;
+    FILE *adaptationLogFile;
+    clock_t startTime;
+} AdaptationStats;
+
 // ===================================================================
 // CORE NEURAL NETWORK FUNCTIONS
 // ===================================================================
@@ -144,6 +166,26 @@ void pureReinforcementLearning(int numGames, int numPlayers);
 
 // Bootstrap data generation
 void generateMinimalBootstrap(double **inputs, double **outputs, int numSamples);
+
+// ===================================================================
+// NEW
+// ==================================================================
+
+// Diversified training functions
+void trainDiversifiedAI(int numGames);
+int makeOpponentDecision(OpponentStrategy strategy, Player *player, Hand *communityCards, 
+                        int pot, int currentBet, int numPlayers, int position, NeuralNetwork *targetAI);
+void rotateOpponentStrategies(OpponentStrategy strategies[], int numOpponents);
+void initializeOpponentStrategies(OpponentStrategy strategies[], int numOpponents);
+int getNextRotationInterval();
+
+// New meaningful metrics
+AdaptationStats* initializeAdaptationStats(int maxCheckpoints);
+void updateAdaptationStats(AdaptationStats *stats, NeuralNetwork *targetAI, Player players[], 
+                          int numPlayers, int *wins, int totalGames, OpponentStrategy strategies[]);
+void displayAdaptationProgress(AdaptationStats *stats, int currentGame, int totalGames,
+                              int *wins, int numPlayers, OpponentStrategy strategies[]);
+void freeAdaptationStats(AdaptationStats *stats);
 
 // ===================================================================
 // TRAINING MONITORING FUNCTIONS
