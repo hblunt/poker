@@ -51,123 +51,185 @@ SelfPlayStats* initializeSelfPlayStats(int maxCheckpoints) {
     return stats;
 }
 
-// Calculate MSE loss on recent experiences
 double calculateExperienceLoss(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize) {
-    if (!nn || !rb || rb->size < sampleSize) return 0.0;
+    if (!nn || !rb || rb->size < 10) return 0.0;  // Need minimum samples
     
     double totalLoss = 0.0;
     int samplesUsed = 0;
+    int validSamples = 0;
     
-    // Sample recent experiences
-    for (int i = 0; i < sampleSize && i < rb->size; i++) {
-        int index = (rb->size - 1 - i) % rb->capacity;  // Get recent experiences
+    // Use smaller sample size to avoid issues
+    int actualSampleSize = fmin(sampleSize, fmin(500, rb->size));
+    
+    for (int i = 0; i < actualSampleSize; i++) {
+        int index = (rb->size - 1 - i) % rb->capacity;
+        Experience *exp = &rb->buffer[index];
+        
+        // Skip experiences with zero reward (not yet processed)
+        if (exp->reward == 0.0) continue;
+        
+        // Forward pass
+        forwardpropagate(nn, exp->gameState);
+        
+        // Check for invalid network outputs
+        bool validOutput = true;
+        for (int j = 0; j < OUTPUT_SIZE; j++) {
+            if (isnan(nn->outputLayer[j].value) || isinf(nn->outputLayer[j].value)) {
+                validOutput = false;
+                break;
+            }
+        }
+        if (!validOutput) continue;
+        
+        // Create simple target: boost the action that was taken based on reward
+        double target[OUTPUT_SIZE];
+        for (int j = 0; j < OUTPUT_SIZE; j++) {
+            target[j] = nn->outputLayer[j].value;
+        }
+        
+        // Simple adjustment based on reward
+        double adjustment = exp->reward * 0.1;  // Scale reward
+        target[exp->action] = fmax(0.01, fmin(0.99, target[exp->action] + adjustment));
+        
+        // Calculate MSE for this sample
+        double sampleLoss = 0.0;
+        for (int j = 0; j < OUTPUT_SIZE; j++) {
+            double error = target[j] - nn->outputLayer[j].value;
+            sampleLoss += error * error;
+        }
+        
+        totalLoss += sampleLoss / OUTPUT_SIZE;
+        validSamples++;
+        samplesUsed++;
+    }
+    
+    return validSamples > 0 ? totalLoss / validSamples : 0.0;
+}
+
+// Fixed: Calculate network confidence (decisiveness)
+double calculateNetworkConfidence(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize) {
+    if (!nn || !rb || rb->size < 10) return 0.5;
+    
+    double totalConfidence = 0.0;
+    int validSamples = 0;
+    
+    // Use recent experiences
+    int actualSampleSize = fmin(sampleSize, fmin(200, rb->size));
+    
+    for (int i = 0; i < actualSampleSize; i++) {
+        int index = (rb->size - 1 - i) % rb->capacity;
         Experience *exp = &rb->buffer[index];
         
         // Forward pass
         forwardpropagate(nn, exp->gameState);
         
-        // Create target based on reward
-        double target[OUTPUT_SIZE];
+        // Check for valid outputs
+        bool validOutput = true;
+        double sum = 0.0;
         for (int j = 0; j < OUTPUT_SIZE; j++) {
-            target[j] = nn->outputLayer[j].value;  // Current prediction
+            if (isnan(nn->outputLayer[j].value) || isinf(nn->outputLayer[j].value)) {
+                validOutput = false;
+                break;
+            }
+            sum += nn->outputLayer[j].value;
         }
         
-        // Adjust target based on experience outcome
-        if (exp->reward > 0) {
-            target[exp->action] = fmin(1.0, target[exp->action] + 0.1);  // Reinforce good actions
-        } else if (exp->reward < 0) {
-            target[exp->action] = fmax(0.0, target[exp->action] - 0.1);  // Discourage bad actions
-        }
+        if (!validOutput || sum <= 0.0) continue;
         
-        // Normalize to probabilities
-        double sum = 0;
-        for (int j = 0; j < OUTPUT_SIZE; j++) sum += target[j];
-        if (sum > 0) {
-            for (int j = 0; j < OUTPUT_SIZE; j++) target[j] /= sum;
-        }
-        
-        // Calculate MSE
-        for (int j = 0; j < OUTPUT_SIZE; j++) {
-            double error = target[j] - nn->outputLayer[j].value;
-            totalLoss += error * error;
-        }
-        samplesUsed++;
-    }
-    
-    return samplesUsed > 0 ? totalLoss / (samplesUsed * OUTPUT_SIZE) : 0.0;
-}
-
-// Calculate network confidence (entropy-based)
-double calculateNetworkConfidence(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize) {
-    if (!nn || !rb || rb->size < sampleSize) return 0.5;
-    
-    double totalConfidence = 0.0;
-    int samplesUsed = 0;
-    
-    for (int i = 0; i < sampleSize && i < rb->size; i++) {
-        int index = (rb->size - 1 - i) % rb->capacity;
-        Experience *exp = &rb->buffer[index];
-        
-        forwardpropagate(nn, exp->gameState);
-        
-        // Calculate confidence as max probability
+        // Find max probability (confidence)
         double maxProb = 0.0;
         for (int j = 0; j < OUTPUT_SIZE; j++) {
-            if (nn->outputLayer[j].value > maxProb) {
-                maxProb = nn->outputLayer[j].value;
+            double prob = nn->outputLayer[j].value / sum;  // Normalize
+            if (prob > maxProb) {
+                maxProb = prob;
             }
         }
         
         totalConfidence += maxProb;
-        samplesUsed++;
+        validSamples++;
     }
     
-    return samplesUsed > 0 ? totalConfidence / samplesUsed : 0.5;
+    return validSamples > 0 ? totalConfidence / validSamples : 0.5;
 }
 
-// Calculate strategy stability (how much network output changes)
+// Fixed: Calculate strategy stability (how similar are different AIs)
 double calculateStrategyStability(NeuralNetwork **networks, int numPlayers, 
                                  ReplayBuffer *rb, int sampleSize) {
-    if (!networks || !rb || rb->size < sampleSize) return 0.0;
+    if (!networks || !rb || rb->size < 10 || numPlayers < 2) return 0.5;
     
-    double totalVariance = 0.0;
-    int samplesUsed = 0;
+    double totalSimilarity = 0.0;
+    int validComparisons = 0;
     
-    for (int i = 0; i < sampleSize && i < rb->size; i++) {
+    // Use fewer samples for stability
+    int actualSampleSize = fmin(sampleSize, fmin(100, rb->size));
+    
+    for (int i = 0; i < actualSampleSize; i++) {
         int index = (rb->size - 1 - i) % rb->capacity;
         Experience *exp = &rb->buffer[index];
         
-        // Get predictions from all networks for same game state
+        // Get predictions from all networks
         double predictions[MAXPLAYERS][OUTPUT_SIZE];
+        bool validNetworks[MAXPLAYERS];
+        int validNetworkCount = 0;
+        
         for (int p = 0; p < numPlayers; p++) {
             forwardpropagate(networks[p], exp->gameState);
+            
+            // Check for valid outputs and normalize
+            validNetworks[p] = true;
+            double sum = 0.0;
             for (int j = 0; j < OUTPUT_SIZE; j++) {
-                predictions[p][j] = networks[p]->outputLayer[j].value;
+                if (isnan(networks[p]->outputLayer[j].value) || 
+                    isinf(networks[p]->outputLayer[j].value)) {
+                    validNetworks[p] = false;
+                    break;
+                }
+                sum += networks[p]->outputLayer[j].value;
+            }
+            
+            if (validNetworks[p] && sum > 0.0) {
+                for (int j = 0; j < OUTPUT_SIZE; j++) {
+                    predictions[p][j] = networks[p]->outputLayer[j].value / sum;
+                }
+                validNetworkCount++;
             }
         }
         
-        // Calculate variance across networks
-        for (int j = 0; j < OUTPUT_SIZE; j++) {
-            double mean = 0.0;
-            for (int p = 0; p < numPlayers; p++) {
-                mean += predictions[p][j];
+        if (validNetworkCount < 2) continue;
+        
+        // Calculate average pairwise similarity
+        double similarity = 0.0;
+        int pairCount = 0;
+        
+        for (int p1 = 0; p1 < numPlayers; p1++) {
+            if (!validNetworks[p1]) continue;
+            for (int p2 = p1 + 1; p2 < numPlayers; p2++) {
+                if (!validNetworks[p2]) continue;
+                
+                // Calculate cosine similarity
+                double dotProduct = 0.0;
+                double norm1 = 0.0, norm2 = 0.0;
+                
+                for (int j = 0; j < OUTPUT_SIZE; j++) {
+                    dotProduct += predictions[p1][j] * predictions[p2][j];
+                    norm1 += predictions[p1][j] * predictions[p1][j];
+                    norm2 += predictions[p2][j] * predictions[p2][j];
+                }
+                
+                if (norm1 > 0.0 && norm2 > 0.0) {
+                    similarity += dotProduct / (sqrt(norm1) * sqrt(norm2));
+                    pairCount++;
+                }
             }
-            mean /= numPlayers;
-            
-            double variance = 0.0;
-            for (int p = 0; p < numPlayers; p++) {
-                double diff = predictions[p][j] - mean;
-                variance += diff * diff;
-            }
-            variance /= numPlayers;
-            totalVariance += variance;
         }
-        samplesUsed++;
+        
+        if (pairCount > 0) {
+            totalSimilarity += similarity / pairCount;
+            validComparisons++;
+        }
     }
     
-    // Return stability (inverse of variance)
-    double avgVariance = samplesUsed > 0 ? totalVariance / (samplesUsed * OUTPUT_SIZE) : 1.0;
-    return fmax(0.0, 1.0 - avgVariance);  // Higher = more stable
+    return validComparisons > 0 ? totalSimilarity / validComparisons : 0.5;
 }
 
 // Update self-play statistics
@@ -262,8 +324,8 @@ void displaySelfPlayProgress(SelfPlayStats *stats, int currentGame, int totalGam
            stats->confidenceHistory[latest], stats->confidenceHistory[latest] * 100);
     if (latest > 0) {
         double change = stats->confidenceHistory[latest] - stats->confidenceHistory[latest-1];
-        if (change > 0.01) printf(" ↑ MORE DECISIVE");
-        else if (change < -0.01) printf(" ↓ LESS DECISIVE");
+        if (change > 0.01) printf(" MORE DECISIVE");
+        else if (change < -0.01) printf(" LESS DECISIVE");
         else printf(" → STABLE");
     }
     printf("\n");
@@ -272,8 +334,8 @@ void displaySelfPlayProgress(SelfPlayStats *stats, int currentGame, int totalGam
            stats->strategyStability[latest], stats->strategyStability[latest] * 100);
     if (latest > 0) {
         double change = stats->strategyStability[latest] - stats->strategyStability[latest-1];
-        if (change > 0.01) printf(" ↑ CONVERGING");
-        else if (change < -0.01) printf(" ↓ DIVERGING");
+        if (change > 0.01) printf(" CONVERGING");
+        else if (change < -0.01) printf(" DIVERGING");
         else printf(" → STABLE");
     }
     printf("\n");
