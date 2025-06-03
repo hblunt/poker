@@ -1619,11 +1619,10 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     printf("\n");
     printRepeatedChar('=', 70);
     printf("\n");
-    printf("PHASE 2: PURE REINFORCEMENT LEARNING\n");
+    printf("PHASE 2: PURE REINFORCEMENT LEARNING WITH LOSS TRACKING\n");
     printRepeatedChar('=', 70);
     printf("\n");
-    printf("Starting self-play from bootstrap network...\n");
-    printf("The AI will now discover its own strategy through experience!\n");
+    printf("Starting self-play with comprehensive loss monitoring...\n");
     printf("Bootstrap knowledge may be completely overwritten.\n");
     printRepeatedChar('=', 70);
     printf("\n\n");
@@ -1665,16 +1664,22 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
         }
         
         // Add noise for diversity (each AI will evolve differently)
-        addNoiseToWeights(networks[i], 0.15);  // Slightly more noise than before
+        addNoiseToWeights(networks[i], 0.15);
         printf("AI_%d initialized from bootstrap + noise\n", i);
     }
     
     ReplayBuffer *rb = createReplayBuffer(100000);
     
+    // Initialize self-play loss tracking *** NEW ***
+    int progressCheckpoints = 20;
+    SelfPlayStats *lossStats = initializeSelfPlayStats(progressCheckpoints);
+    if (!lossStats) {
+        printf("Warning: Could not initialize loss tracking, continuing without it...\n");
+    }
+    
     // Training tracking
     int wins[MAXPLAYERS] = {0};
     double avgCredits[MAXPLAYERS] = {0};
-    int progressCheckpoints = 20;
     int gamesPerCheckpoint = numGames / progressCheckpoints;
     
     FILE *progressFile = fopen("selfplay_progress.csv", "w");
@@ -1684,7 +1689,7 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     
     clock_t startTime = clock();
     
-    printf("Starting pure self-play learning...\n");
+    printf("Starting pure self-play learning with loss monitoring...\n");
     printf("Each AI will develop its own strategy through experience!\n\n");
     
     // Main self-play training loop
@@ -1704,28 +1709,35 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
             }
         }
         
-        // Progress monitoring
+        // Enhanced progress monitoring with loss tracking *** MODIFIED ***
         if (game > 0 && (game % gamesPerCheckpoint == 0 || game == numGames - 1)) {
             clock_t currentTime = clock();
             double elapsed = ((double)(currentTime - startTime)) / CLOCKS_PER_SEC;
             
-            printf("\n");
-            printRepeatedChar('-', 50);
-            printf("\n");
-            printf("SELF-PLAY PROGRESS: Game %d/%d (%.1f%%)\n", game, numGames, (game * 100.0) / numGames);
-            printRepeatedChar('-', 50);
-            printf("\n");
-            printf("Time elapsed: %.1f seconds (%.2f games/sec)\n", elapsed, game / elapsed);
-            printf("Experience buffer: %d samples\n", rb->size);
-            
-            printf("\nCurrent win rates (evolved from bootstrap):\n");
-            for (int i = 0; i < numPlayers; i++) {
-                double winRate = (game > 0) ? (wins[i] * 100.0) / game : 0.0;
-                printf("  AI_%d: %.1f%% (%d wins) | Avg Credits: %.0f\n", 
-                       i, winRate, wins[i], avgCredits[i]);
+            // Update self-play loss statistics *** NEW ***
+            if (lossStats) {
+                updateSelfPlayStats(lossStats, networks, numPlayers, rb, wins, game, avgCredits);
+                displaySelfPlayProgress(lossStats, game, numGames, wins, numPlayers, avgCredits, rb->size);
+            } else {
+                // Fallback to original progress display
+                printf("\n");
+                printRepeatedChar('-', 50);
+                printf("\n");
+                printf("SELF-PLAY PROGRESS: Game %d/%d (%.1f%%)\n", game, numGames, (game * 100.0) / numGames);
+                printRepeatedChar('-', 50);
+                printf("\n");
+                printf("Time elapsed: %.1f seconds (%.2f games/sec)\n", elapsed, game / elapsed);
+                printf("Experience buffer: %d samples\n", rb->size);
+                
+                printf("\nCurrent win rates (evolved from bootstrap):\n");
+                for (int i = 0; i < numPlayers; i++) {
+                    double winRate = (game > 0) ? (wins[i] * 100.0) / game : 0.0;
+                    printf("  AI_%d: %.1f%% (%d wins) | Avg Credits: %.0f\n", 
+                           i, winRate, wins[i], avgCredits[i]);
+                }
             }
             
-            // Log to file
+            // Log to file (keep existing logging)
             if (progressFile) {
                 fprintf(progressFile, "%d", game);
                 for (int i = 0; i < numPlayers; i++) {
@@ -1739,7 +1751,7 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
             }
         }
         
-        // Progress dots
+        // Progress dots (keep existing)
         if (game % (numGames / 100) == 0 && game % gamesPerCheckpoint != 0) {
             printf(".");
             fflush(stdout);
@@ -1758,6 +1770,11 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     printf("Total training time: %.2f seconds (%.2f minutes)\n", totalTime, totalTime / 60.0);
     printf("Games played: %d\n", numGames);
     printf("Experience samples: %d\n", rb->size);
+    
+    // Enhanced final summary with loss information *** NEW ***
+    if (lossStats) {
+        displaySelfPlaySummary(lossStats, numGames, wins, numPlayers, avgCredits);
+    }
     
     printf("\nFINAL EVOLVED STRATEGIES:\n");
     int bestAI = 0;
@@ -1788,13 +1805,15 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
         saveNetwork(networks[i], filename);
     }
     
-    printf("All evolved AIs saved. Training log: selfplay_progress.csv\n");
+    printf("All evolved AIs saved.\n");
+    printf("Training logs: selfplay_progress.csv, selfplay_loss_log.csv\n");
     printRepeatedChar('=', 70);
     printf("\n");
     
-    // Cleanup
+    // Cleanup *** MODIFIED ***
     if (progressFile) fclose(progressFile);
     if (bootstrap) freeNetwork(bootstrap);
+    if (lossStats) freeSelfPlayStats(lossStats);  // *** NEW ***
     for (int i = 0; i < numPlayers; i++) {
         freeNetwork(networks[i]);
     }
@@ -1804,13 +1823,14 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
 }
 
 // Combined two-phase training function
+// Modify the trainTwoPhaseAI function to use tournament evolution
 void trainTwoPhaseAI(int numGames, int numPlayers) {
     printf("\n");
     printRepeatedChar('*', 70);
     printf("\n");
     printf("TWO-PHASE AI TRAINING\n");
     printf("Phase 1: Minimal Bootstrap (basic rules)\n");
-    printf("Phase 2: Pure Self-Play Learning (strategy discovery)\n");
+    printf("Phase 2: Tournament Evolution + Reinforcement Learning\n");
     printRepeatedChar('*', 70);
     printf("\n");
     
@@ -1821,25 +1841,709 @@ void trainTwoPhaseAI(int numGames, int numPlayers) {
         return;
     }
     
-    printf("\nBootstrap complete! Press Enter to begin self-play learning...");
+    printf("\nBootstrap complete! Press Enter to begin tournament evolution...");
     getchar();
     
     // Free bootstrap network (it's saved to file)
     freeNetwork(bootstrap);
     
-    // Phase 2: Pure self-play learning
-    pureReinforcementLearning(numGames, numPlayers);
+    // Phase 2: Tournament evolution (instead of pure self-play)
+    int maxGenerations = 25; // Your failsafe limit
+    tournamentEvolution(maxGenerations);
     
     printf("\n");
     printRepeatedChar('*', 70);
     printf("\n");
     printf("TWO-PHASE TRAINING COMPLETE!\n");
-    printf("Your AI has evolved its own poker strategy!\n");
+    printf("Your AI has learned through tournament competition AND reinforcement learning!\n");
     printf("Files created:\n");
     printf("  - poker_ai_bootstrap.dat (Phase 1 result)\n");
-    printf("  - poker_ai_evolved.dat (Phase 2 best AI)\n");
-    printf("  - evolved_ai_*.dat (All trained AIs)\n");
-    printf("  - selfplay_progress.csv (Training progress log)\n");
+    printf("  - poker_ai_evolved.dat (Final tournament + RL champion)\n");
+    printf("  - poker_ai_previous1.dat (Previous generation champion)\n");
+    printf("  - poker_ai_previous2.dat (2 generations ago champion)\n");
+    printf("  - tournament_evolution.csv (Training progress log)\n");
     printRepeatedChar('*', 70);
     printf("\n");
+}
+
+// Main tournament evolution function - replaces pureReinforcementLearning
+void tournamentEvolution(int maxGenerations) {
+    printf("\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    printf("TOURNAMENT EVOLUTION SYSTEM\n");
+    printf("Population: 6 AIs | Games per Generation: 50 | Max Generations: %d\n", maxGenerations);
+    printf("Stop Condition: Diversity < 0.05 for 3 generations\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    
+    // Initialize tournament state
+    TournamentState *tournament = initializeTournament(6, 50, maxGenerations);
+    if (!tournament) {
+        printf("Error: Failed to initialize tournament system\n");
+        return;
+    }
+    
+    printf("Tournament system initialized successfully.\n");
+    printf("Starting evolution...\n\n");
+    
+    // Evolution loop
+    bool converged = false;
+    while (tournament->generation < tournament->maxGenerations && !converged) {
+        printf("GENERATION %d/%d\n", tournament->generation + 1, tournament->maxGenerations);
+        printRepeatedChar('-', 40);
+        printf("\n");
+        
+        // Run one generation (50 games)
+        runGeneration(tournament);
+        
+        // Check convergence (but not before generation 5)
+        double diversity = calculatePopulationDiversity(tournament->population, tournament->populationSize);
+        tournament->diversityHistory[tournament->generation] = diversity;
+        
+        printf("Generation diversity: %.4f\n", diversity);
+        
+        if (tournament->generation >= 5 && diversity < tournament->diversityThreshold) {
+            tournament->lowDiversityCount++;
+            printf("Low diversity detected: %.4f (count: %d/3)\n", diversity, tournament->lowDiversityCount);
+        } else {
+            tournament->lowDiversityCount = 0;
+        }
+        
+        if (tournament->lowDiversityCount >= 3) {
+            converged = true;
+            printf("Population converged - stopping evolution.\n");
+        }
+        
+        // Evolve population for next generation (unless converged or last generation)
+        if (!converged && tournament->generation < tournament->maxGenerations - 1) {
+            evolvePopulation(tournament);
+        }
+        
+        tournament->generation++;
+        printf("\n");
+    }
+    
+    // Final results
+    clock_t endTime = clock();
+    double totalTime = ((double)(endTime - tournament->startTime)) / CLOCKS_PER_SEC;
+    
+    printf("\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    printf("TOURNAMENT EVOLUTION COMPLETE!\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    printf("Generations completed: %d\n", tournament->generation);
+    printf("Total time: %.2f seconds (%.2f minutes)\n", totalTime, totalTime / 60.0);
+    printf("Total games played: %d\n", tournament->generation * tournament->gamesPerGeneration);
+    printf("Final champion fitness: %.4f\n", tournament->championFitness);
+    
+    if (converged) {
+        printf("Reason: Population converged (diversity < %.3f)\n", tournament->diversityThreshold);
+    } else {
+        printf("Reason: Maximum generations reached\n");
+    }
+    
+    // Save final champions
+    saveChampions(tournament);
+    
+    printf("\nFiles saved:\n");
+    printf("- poker_ai_evolved.dat (final champion)\n");
+    printf("- poker_ai_previous1.dat (previous generation champion)\n");
+    printf("- poker_ai_previous2.dat (2 generations ago champion)\n");
+    printf("- tournament_evolution.csv (detailed log)\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    
+    // Cleanup
+    freeTournamentState(tournament);
+}
+
+// Initialize tournament state
+TournamentState* initializeTournament(int populationSize, int gamesPerGeneration, int maxGenerations) {
+    TournamentState *state = malloc(sizeof(TournamentState));
+    if (!state) return NULL;
+    
+    // Initialize basic parameters
+    state->generation = 0;
+    state->populationSize = populationSize;
+    state->gamesPerGeneration = gamesPerGeneration;
+    state->maxGenerations = maxGenerations;
+    state->championFitness = -1.0;
+    state->lowDiversityCount = 0;
+    state->diversityThreshold = 0.02;  // Lower threshold for convergence
+    state->startTime = clock();
+    
+    // Allocate arrays
+    state->population = malloc(populationSize * sizeof(NeuralNetwork*));
+    state->fitness = malloc(populationSize * sizeof(double));
+    state->wins = malloc(populationSize * sizeof(int));
+    state->avgCredits = malloc(populationSize * sizeof(double));
+    state->diversityHistory = malloc(maxGenerations * sizeof(double));
+    
+    // Allocate experience collection arrays
+    state->maxExperiences = gamesPerGeneration * 10; // Up to 10 experiences per game per AI
+    state->aiExperiences = malloc(populationSize * sizeof(Experience*));
+    state->experienceCount = malloc(populationSize * sizeof(int));
+    
+    if (!state->population || !state->fitness || !state->wins || 
+        !state->avgCredits || !state->diversityHistory || 
+        !state->aiExperiences || !state->experienceCount) {
+        printf("Error: Memory allocation failed\n");
+        free(state);
+        return NULL;
+    }
+    
+    // Initialize experience buffers for each AI
+    for (int i = 0; i < populationSize; i++) {
+        state->aiExperiences[i] = malloc(state->maxExperiences * sizeof(Experience));
+        state->experienceCount[i] = 0;
+        if (!state->aiExperiences[i]) {
+            printf("Error: Experience buffer allocation failed\n");
+            free(state);
+            return NULL;
+        }
+    }
+    
+    // Initialize champions as NULL
+    state->currentChampion = NULL;
+    state->previousChampion1 = NULL;
+    state->previousChampion2 = NULL;
+    
+    // Create initial population from bootstrap
+    NeuralNetwork *bootstrap = loadNetwork("poker_ai_bootstrap.dat");
+    if (!bootstrap) {
+        printf("No bootstrap found - creating random base network\n");
+        bootstrap = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    }
+    
+    for (int i = 0; i < populationSize; i++) {
+        state->population[i] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+        if (bootstrap) {
+            copyNetworkWeights(bootstrap, state->population[i]);
+        }
+        
+        // Add much more noise for initial diversity
+        double noiseLevel;
+        if (i == 0) {
+            noiseLevel = 0.1;   // Light mutation
+        } else if (i == 1) {
+            noiseLevel = 0.2;   // Medium mutation
+        } else if (i == 2) {
+            noiseLevel = 0.3;   // Heavy mutation
+        } else if (i == 3) {
+            noiseLevel = 0.5;   // Very heavy mutation
+        } else if (i == 4) {
+            noiseLevel = 0.7;   // Extreme mutation
+        } else {
+            noiseLevel = 1.0;   // Nearly random network
+        }
+        
+        mutateNetwork(state->population[i], noiseLevel);
+        
+        state->fitness[i] = 0.0;
+        state->wins[i] = 0;
+        state->avgCredits[i] = 0.0;
+        
+        printf("AI_%d created with %.1f mutation strength\n", i, noiseLevel);
+    }
+    
+    if (bootstrap) freeNetwork(bootstrap);
+    
+    // Open log file
+    state->logFile = fopen("tournament_evolution.csv", "w");
+    if (state->logFile) {
+        fprintf(state->logFile, "Generation,Winner_ID,Best_Fitness,Best_WinRate,Best_Credits,Avg_Fitness,Population_Diversity\n");
+    }
+    
+    printf("Initial population created with %d AIs\n", populationSize);
+    return state;
+}
+
+// Run one generation (50 games)
+void runGeneration(TournamentState *state) {
+    // Reset scores and experience counts
+    for (int i = 0; i < state->populationSize; i++) {
+        state->wins[i] = 0;
+        state->avgCredits[i] = 0.0;
+        state->fitness[i] = 0.0;
+        state->experienceCount[i] = 0;  // Reset experience counter
+    }
+    
+    // Initialize opponent profiles for this generation
+    initializeOpponentProfiles(state->populationSize);
+    
+    printf("Playing %d games with %d AIs...\n", state->gamesPerGeneration, state->populationSize);
+    
+    // Play games and collect experiences
+    for (int game = 0; game < state->gamesPerGeneration; game++) {
+        int winner = playTournamentGame(state->population, state->populationSize, state, game);
+        if (winner >= 0) {
+            state->wins[winner]++;
+        }
+        
+        // Show progress every 10 games
+        if ((game + 1) % 10 == 0) {
+            printf("Games completed: %d/%d\n", game + 1, state->gamesPerGeneration);
+        }
+    }
+    
+    printf("All games completed. Starting reinforcement learning phase...\n");
+    
+    // Perform reinforcement learning on collected experiences
+    performReinforcementLearning(state);
+    
+    printf("Reinforcement learning complete. Calculating fitness...\n");
+    
+    // Calculate fitness scores
+    calculateFitness(state);
+    
+    // Find generation winner and update champion
+    int winner = 0;
+    double bestFitness = state->fitness[0];
+    for (int i = 1; i < state->populationSize; i++) {
+        if (state->fitness[i] > bestFitness) {
+            bestFitness = state->fitness[i];
+            winner = i;
+        }
+    }
+    
+    printf("Generation results:\n");
+    for (int i = 0; i < state->populationSize; i++) {
+        printf("  AI_%d: %d wins (%.1f%%), %.0f credits, %.4f fitness%s\n", 
+               i, state->wins[i], 
+               (state->wins[i] * 100.0) / state->gamesPerGeneration,
+               state->avgCredits[i], state->fitness[i],
+               (i == winner) ? " <- WINNER" : "");
+    }
+    
+    // Update champion tracking
+    if (bestFitness > state->championFitness) {
+        // Shift previous champions
+        if (state->previousChampion1) freeNetwork(state->previousChampion1);
+        state->previousChampion1 = state->previousChampion2;
+        state->previousChampion2 = state->currentChampion;
+        
+        // Create new champion
+        state->currentChampion = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+        copyNetworkWeights(state->population[winner], state->currentChampion);
+        state->championFitness = bestFitness;
+        
+        printf("NEW CHAMPION! AI_%d with fitness %.4f\n", winner, bestFitness);
+    } else {
+        printf("No improvement. Current champion fitness: %.4f\n", state->championFitness);
+    }
+    
+    // Log generation results
+    if (state->logFile) {
+        double avgFitness = 0.0;
+        for (int i = 0; i < state->populationSize; i++) {
+            avgFitness += state->fitness[i];
+        }
+        avgFitness /= state->populationSize;
+        
+        double diversity = calculatePopulationDiversity(state->population, state->populationSize);
+        
+        fprintf(state->logFile, "%d,%d,%.4f,%.4f,%.2f,%.4f,%.4f\n",
+                state->generation + 1, winner, bestFitness,
+                (double)state->wins[winner] / state->gamesPerGeneration,
+                state->avgCredits[winner], avgFitness, diversity);
+        fflush(state->logFile);
+    }
+}
+
+// Play one tournament game with all 6 AIs
+int playTournamentGame(NeuralNetwork **networks, int numPlayers, TournamentState *state, int gameNum) {
+    Player players[MAXPLAYERS];
+    
+    // Initialize players
+    for (int i = 0; i < numPlayers; i++) {
+        sprintf(players[i].name, "AI_%d", i);
+        players[i].credits = STARTING_CREDITS;
+        players[i].status = ACTIVE;
+        players[i].hand = NULL;
+        players[i].dealer = (i == 0);
+        players[i].currentBet = 0;
+    }
+    
+    // Use existing game mechanics but simplified
+    Hand *deck = createDeck(1, 1);
+    Hand *communityCards = createHand();
+    
+    // Find dealer and post blinds
+    int dealerPos = 0;
+    int smallBlindPos = (dealerPos + 1) % numPlayers;
+    int bigBlindPos = (dealerPos + 2) % numPlayers;
+    
+    players[smallBlindPos].credits -= SMALL_BLIND;
+    players[smallBlindPos].currentBet = SMALL_BLIND;
+    players[bigBlindPos].credits -= BIG_BLIND;
+    players[bigBlindPos].currentBet = BIG_BLIND;
+    
+    int pot = SMALL_BLIND + BIG_BLIND;
+    
+    // Deal cards
+    dealHand(players, numPlayers, deck, communityCards);
+    
+    // Play simplified betting rounds using AI decisions
+    int currentBetAmount = BIG_BLIND;
+    
+    // Pre-flop
+    if (!simplifiedBettingRound(players, numPlayers, &pot, &currentBetAmount, 
+                               communityCards, 0, networks, state, gameNum)) {
+        // Flop
+        resetCurrentBets(players, numPlayers);
+        currentBetAmount = 0;
+        if (!simplifiedBettingRound(players, numPlayers, &pot, &currentBetAmount, 
+                                   communityCards, 3, networks, state, gameNum)) {
+            // Turn
+            resetCurrentBets(players, numPlayers);
+            currentBetAmount = 0;
+            if (!simplifiedBettingRound(players, numPlayers, &pot, &currentBetAmount, 
+                                       communityCards, 4, networks, state, gameNum)) {
+                // River
+                resetCurrentBets(players, numPlayers);
+                currentBetAmount = 0;
+                simplifiedBettingRound(players, numPlayers, &pot, &currentBetAmount, 
+                                     communityCards, 5, networks, state, gameNum);
+            }
+        }
+    }
+    
+    // Determine winner
+    int winner = determineWinner(players, numPlayers, communityCards);
+    if (winner >= 0) {
+        players[winner].credits += pot;
+        
+        // Update experiences for the winner - mark recent experiences as winning
+        if (state->experienceCount[winner] > 0) {
+            // Mark the last few experiences of the winner as successful
+            int experiencesToMark = (state->experienceCount[winner] > 5) ? 5 : state->experienceCount[winner];
+            for (int exp = state->experienceCount[winner] - experiencesToMark; 
+                 exp < state->experienceCount[winner]; exp++) {
+                state->aiExperiences[winner][exp]->gameOutcome = 1; // Use gameOutcome instead of won
+                state->aiExperiences[winner][exp]->reward = 1.0; // Positive reward for winning
+            }
+        }
+    }
+    
+    // Give small negative rewards to non-winners recent experiences
+    for (int i = 0; i < numPlayers; i++) {
+        if (i != winner && state->experienceCount[i] > 0) {
+            int experiencesToMark = (state->experienceCount[i] > 3) ? 3 : state->experienceCount[i];
+            for (int exp = state->experienceCount[i] - experiencesToMark; 
+                 exp < state->experienceCount[i]; exp++) {
+                state->aiExperiences[i][exp].reward = -0.1; // Small negative reward
+                state->aiExperiences[i][exp].gameOutcome = 0; // Lost
+            }
+        }
+    }
+    
+    // Update average credits in tournament state
+    for (int i = 0; i < numPlayers; i++) {
+        state->avgCredits[i] = (state->avgCredits[i] * gameNum + players[i].credits) / (gameNum + 1);
+    }
+    
+    // Cleanup
+    freeHand(deck, 1);
+    freeHand(communityCards, 1);
+    for (int i = 0; i < numPlayers; i++) {
+        if (players[i].hand) {
+            freeHand(players[i].hand, 1);
+        }
+    }
+    
+    return winner;
+}
+
+// Simplified betting round for tournament games
+bool simplifiedBettingRound(Player players[], int numPlayers, int *pot, 
+                           int *currentBetAmount, Hand *communityCards, 
+                           int cardsRevealed, NeuralNetwork **networks, TournamentState *state, int gameNum) {
+    int activePlayers = 0;
+    
+    // Count active players
+    for (int i = 0; i < numPlayers; i++) {
+        if (players[i].status == ACTIVE) activePlayers++;
+    }
+    
+    if (activePlayers <= 1) return true; // Game over
+    
+    // Simple betting round - each player acts once
+    for (int i = 0; i < numPlayers; i++) {
+        if (players[i].status != ACTIVE) continue;
+        
+        int toCall = *currentBetAmount - players[i].currentBet;
+        
+        // Get AI decision
+        int decision = makeEnhancedDecision(networks[i], &players[i], communityCards,
+                                          *pot, *currentBetAmount, activePlayers, i);
+        
+        // Collect experience for this decision (we'll determine if it was good later)
+        collectExperience(state, i, gameNum, &players[i], communityCards, decision,
+                         *pot, *currentBetAmount, false); // false = game outcome unknown yet
+        
+        switch(decision) {
+            case 0: // Fold
+                players[i].status = FOLDED;
+                activePlayers--;
+                break;
+                
+            case 1: // Call/Check
+                if (toCall > 0) {
+                    int callAmount = (toCall > players[i].credits) ? 
+                                   players[i].credits : toCall;
+                    players[i].credits -= callAmount;
+                    players[i].currentBet += callAmount;
+                    *pot += callAmount;
+                }
+                break;
+                
+            case 2: // Raise
+                int raiseAmount = *currentBetAmount + BIG_BLIND;
+                if (raiseAmount > players[i].credits + players[i].currentBet) {
+                    raiseAmount = players[i].credits + players[i].currentBet;
+                }
+                
+                int amountToAdd = raiseAmount - players[i].currentBet;
+                *currentBetAmount = raiseAmount;
+                
+                players[i].credits -= amountToAdd;
+                players[i].currentBet = raiseAmount;
+                *pot += amountToAdd;
+                break;
+        }
+        
+        if (activePlayers <= 1) return true; // Game over
+    }
+    
+    return false; // Continue to next round
+}
+
+// Calculate fitness scores for all AIs
+void calculateFitness(TournamentState *state) {
+    for (int i = 0; i < state->populationSize; i++) {
+        double winRate = (double)state->wins[i] / state->gamesPerGeneration;
+        double creditScore = state->avgCredits[i] / STARTING_CREDITS;
+        
+        // Fitness formula: 70% win rate + 30% credit performance
+        state->fitness[i] = (winRate * 0.7) + (creditScore * 0.3);
+    }
+}
+
+// Evolve population: keep top 2, create 4 mutated offspring
+void evolvePopulation(TournamentState *state) {
+    printf("Evolving population...\n");
+    
+    // Find top 2 performers
+    int indices[6] = {0, 1, 2, 3, 4, 5};
+    
+    // Simple selection sort to find top 2
+    for (int i = 0; i < 2; i++) {
+        for (int j = i + 1; j < state->populationSize; j++) {
+            if (state->fitness[indices[j]] > state->fitness[indices[i]]) {
+                int temp = indices[i];
+                indices[i] = indices[j];
+                indices[j] = temp;
+            }
+        }
+    }
+    
+    int parent1 = indices[0];
+    int parent2 = indices[1];
+    
+    printf("Parents: AI_%d (fitness: %.4f), AI_%d (fitness: %.4f)\n", 
+           parent1, state->fitness[parent1], parent2, state->fitness[parent2]);
+    
+    // Create temporary networks for new generation
+    NeuralNetwork *newGeneration[6];
+    
+    // Keep the two parents
+    newGeneration[0] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    newGeneration[1] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    copyNetworkWeights(state->population[parent1], newGeneration[0]);
+    copyNetworkWeights(state->population[parent2], newGeneration[1]);
+    
+    // Create 4 offspring through mutation
+    newGeneration[2] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    newGeneration[3] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    newGeneration[4] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    newGeneration[5] = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    
+    // Offspring 1: Parent 1 + small mutation
+    copyNetworkWeights(state->population[parent1], newGeneration[2]);
+    mutateNetwork(newGeneration[2], 0.1);
+    
+    // Offspring 2: Parent 2 + small mutation  
+    copyNetworkWeights(state->population[parent2], newGeneration[3]);
+    mutateNetwork(newGeneration[3], 0.1);
+    
+    // Offspring 3: Parent 1 + medium mutation
+    copyNetworkWeights(state->population[parent1], newGeneration[4]);
+    mutateNetwork(newGeneration[4], 0.2);
+    
+    // Offspring 4: Parent 2 + large mutation
+    copyNetworkWeights(state->population[parent2], newGeneration[5]);
+    mutateNetwork(newGeneration[5], 0.3);
+    
+    // Replace old population
+    for (int i = 0; i < state->populationSize; i++) {
+        freeNetwork(state->population[i]);
+        state->population[i] = newGeneration[i];
+    }
+    
+    printf("New generation created: 2 parents + 4 mutated offspring\n");
+}
+
+// Calculate population diversity (average pairwise weight differences)
+double calculatePopulationDiversity(NeuralNetwork **networks, int count) {
+    if (count < 2) return 1.0;
+    
+    double totalDiversity = 0.0;
+    int comparisons = 0;
+    
+    // Compare each pair of networks
+    for (int i = 0; i < count; i++) {
+        for (int j = i + 1; j < count; j++) {
+            double weightDiff = 0.0;
+            int totalWeights = 0;
+            
+            // Compare input-hidden weights
+            for (int inp = 0; inp < INPUT_SIZE; inp++) {
+                for (int hid = 0; hid < HIDDEN_SIZE; hid++) {
+                    weightDiff += fabs(networks[i]->weightsInputHidden[inp][hid] - 
+                                     networks[j]->weightsInputHidden[inp][hid]);
+                    totalWeights++;
+                }
+            }
+            
+            // Compare hidden-output weights
+            for (int hid = 0; hid < HIDDEN_SIZE; hid++) {
+                for (int out = 0; out < OUTPUT_SIZE; out++) {
+                    weightDiff += fabs(networks[i]->weightsHiddenOutput[hid][out] - 
+                                     networks[j]->weightsHiddenOutput[hid][out]);
+                    totalWeights++;
+                }
+            }
+            
+            totalDiversity += weightDiff / totalWeights;
+            comparisons++;
+        }
+    }
+    
+    return comparisons > 0 ? totalDiversity / comparisons : 0.0;
+}
+
+// Deep copy network weights
+void copyNetworkWeights(NeuralNetwork *source, NeuralNetwork *target) {
+    if (!source || !target) return;
+    
+    // Copy input-hidden weights
+    for (int i = 0; i < source->inputSize; i++) {
+        for (int j = 0; j < source->hiddenSize; j++) {
+            target->weightsInputHidden[i][j] = source->weightsInputHidden[i][j];
+        }
+    }
+    
+    // Copy hidden-output weights
+    for (int i = 0; i < source->hiddenSize; i++) {
+        for (int j = 0; j < source->outputSize; j++) {
+            target->weightsHiddenOutput[i][j] = source->weightsHiddenOutput[i][j];
+        }
+    }
+    
+    // Copy biases
+    for (int i = 0; i < source->hiddenSize; i++) {
+        target->biasHidden[i] = source->biasHidden[i];
+    }
+    for (int i = 0; i < source->outputSize; i++) {
+        target->biasOutput[i] = source->biasOutput[i];
+    }
+}
+
+// Mutate network weights
+void mutateNetwork(NeuralNetwork *network, double mutationStrength) {
+    if (!network) return;
+    
+    // Mutate input-hidden weights
+    for (int i = 0; i < network->inputSize; i++) {
+        for (int j = 0; j < network->hiddenSize; j++) {
+            double noise = ((double)rand() / RAND_MAX - 0.5) * 2 * mutationStrength;
+            network->weightsInputHidden[i][j] += noise;
+        }
+    }
+    
+    // Mutate hidden-output weights
+    for (int i = 0; i < network->hiddenSize; i++) {
+        for (int j = 0; j < network->outputSize; j++) {
+            double noise = ((double)rand() / RAND_MAX - 0.5) * 2 * mutationStrength;
+            network->weightsHiddenOutput[i][j] += noise;
+        }
+    }
+    
+    // Mutate biases
+    for (int i = 0; i < network->hiddenSize; i++) {
+        double noise = ((double)rand() / RAND_MAX - 0.5) * 2 * mutationStrength;
+        network->biasHidden[i] += noise;
+    }
+    for (int i = 0; i < network->outputSize; i++) {
+        double noise = ((double)rand() / RAND_MAX - 0.5) * 2 * mutationStrength;
+        network->biasOutput[i] += noise;
+    }
+}
+
+// Save current and previous champions
+void saveChampions(TournamentState *state) {
+    if (state->currentChampion) {
+        saveNetwork(state->currentChampion, "poker_ai_evolved.dat");
+    }
+    if (state->previousChampion1) {
+        saveNetwork(state->previousChampion1, "poker_ai_previous1.dat");
+    }
+    if (state->previousChampion2) {
+        saveNetwork(state->previousChampion2, "poker_ai_previous2.dat");
+    }
+}
+
+// Free all tournament memory
+void freeTournamentState(TournamentState *state) {
+    if (!state) return;
+    
+    // Free population
+    if (state->population) {
+        for (int i = 0; i < state->populationSize; i++) {
+            if (state->population[i]) {
+                freeNetwork(state->population[i]);
+            }
+        }
+        free(state->population);
+    }
+    
+    // Free experience arrays
+    if (state->aiExperiences) {
+        for (int i = 0; i < state->populationSize; i++) {
+            if (state->aiExperiences[i]) {
+                free(state->aiExperiences[i]);
+            }
+        }
+        free(state->aiExperiences);
+    }
+    if (state->experienceCount) free(state->experienceCount);
+    
+    // Free champions
+    if (state->currentChampion) freeNetwork(state->currentChampion);
+    if (state->previousChampion1) freeNetwork(state->previousChampion1);
+    if (state->previousChampion2) freeNetwork(state->previousChampion2);
+    
+    // Free arrays
+    if (state->fitness) free(state->fitness);
+    if (state->wins) free(state->wins);
+    if (state->avgCredits) free(state->avgCredits);
+    if (state->diversityHistory) free(state->diversityHistory);
+    
+    // Close log file
+    if (state->logFile) fclose(state->logFile);
+    
+    free(state);
 }

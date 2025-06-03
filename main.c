@@ -40,25 +40,22 @@ int main(void) {
             break;
 
         case '2':
-            printf("\n[TWO-PHASE] Starting two-phase AI training...\n");
-            printf("Phase 1: Minimal bootstrap (basic rules)\n");
-            printf("Phase 2: Pure self-play learning (strategy discovery)\n\n");
+            printf("\n[TOURNAMENT] Starting tournament evolution training...\n");
+            printf("Configuration:\n");
+            printf("  - Population: 6 AIs per generation\n");
+            printf("  - Games: 50 per generation\n");
+            printf("  - Max Generations: 25\n");
+            printf("  - Stop Condition: Population diversity < 0.02 for 3 generations\n");
+            printf("  - Estimated Time: 5-20 minutes\n\n");
             
-            int games, aiPlayers;
-            printf("Number of self-play games (recommended: 1000-5000): ");
-            scanf("%d", &games);
-            printf("Number of AI players for self-play (2-6): ");
-            scanf("%d", &aiPlayers);
-            clearInputBuffer();
+            printf("This will create highly evolved poker strategies through competition.\n");
+            printf("Press Enter to start training...");
+            getchar();
             
-            if (games < 50) games = 1000;
-            if (aiPlayers < 2) aiPlayers = 4;
-            if (aiPlayers > 6) aiPlayers = 6;
+            // Call training with fixed parameters
+            trainTwoPhaseAI(1250, 6);  // Parameters ignored but kept for compatibility
             
-            printf("Starting two-phase training: %d games with %d AIs\n", games, aiPlayers);
-            trainTwoPhaseAI(games, aiPlayers);
-            
-            // Automatically show training results and ask if user wants to play
+            // Automatically show training results
             printf("\nTraining complete! Would you like to play against the evolved AI? (Y/N): ");
             char playChoice;
             scanf(" %c", &playChoice);
@@ -68,10 +65,9 @@ int main(void) {
                 initialiseAI();
                 numPlayers = setupWithAI(players);
             } else {
-                return 0;  // Exit program
+                return 0;
             }
             break;
-
         case '3':
             printf("\n[HUMAN] Setting up human-only game...\n");
             numPlayers = setup(players);

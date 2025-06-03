@@ -22,11 +22,14 @@
 #define ACTIVATION_SIGMOID 1
 #define ACTIVATION_TANH 2
 
+
+
 // ===================================================================
 // CORE DATA STRUCTURES
 // ===================================================================
 
 // Opponent tracking structure for enhanced decision making
+typedef struct Experience Experience;
 typedef struct {
     double aggressionLevel;      // 0.0 (passive) to 1.0 (aggressive)
     double tightness;           // 0.0 (loose) to 1.0 (tight)
@@ -144,6 +147,61 @@ void pureReinforcementLearning(int numGames, int numPlayers);
 
 // Bootstrap data generation
 void generateMinimalBootstrap(double **inputs, double **outputs, int numSamples);
+
+// Tournament evolution state tracker
+typedef struct {
+    int generation;
+    int populationSize;
+    int gamesPerGeneration;
+    int maxGenerations;
+    
+    // Population management
+    NeuralNetwork **population;
+    double *fitness;
+    int *wins;
+    double *avgCredits;
+    
+    // Experience collection for RL learning
+    Experience **aiExperiences;  // Array of experience buffers for each AI
+    int *experienceCount;        // Number of experiences per AI
+    int maxExperiences;          // Max experiences per AI per generation
+    
+    // Champion tracking (current + 2 previous)
+    NeuralNetwork *currentChampion;
+    NeuralNetwork *previousChampion1;
+    NeuralNetwork *previousChampion2;
+    double championFitness;
+    
+    // Diversity tracking for stopping criteria
+    double *diversityHistory;
+    int lowDiversityCount;
+    double diversityThreshold;
+    
+    // Progress logging
+    FILE *logFile;
+    clock_t startTime;
+} TournamentState;
+
+// Function declarations
+void tournamentEvolution(int maxGenerations);
+TournamentState* initializeTournament(int populationSize, int gamesPerGeneration, int maxGenerations);
+void runGeneration(TournamentState *state);
+int playTournamentGame(NeuralNetwork **networks, int numPlayers, TournamentState *state, int gameNum);
+bool simplifiedBettingRound(Player players[], int numPlayers, int *pot, 
+                           int *currentBetAmount, Hand *communityCards, 
+                           int cardsRevealed, NeuralNetwork **networks, TournamentState *state, int gameNum);
+void collectExperience(TournamentState *state, int aiIndex, int gameNum,
+                      Player *player, Hand *communityCards, int decision, 
+                      int pot, int currentBet, bool won);
+void performReinforcementLearning(TournamentState *state);
+void calculateFitness(TournamentState *state);
+void evolvePopulation(TournamentState *state);
+double calculatePopulationDiversity(NeuralNetwork **networks, int count);
+void copyNetworkWeights(NeuralNetwork *source, NeuralNetwork *target);
+void mutateNetwork(NeuralNetwork *network, double mutationStrength);
+void saveChampions(TournamentState *state);
+void freeTournamentState(TournamentState *state);
+
 
 // ===================================================================
 // TRAINING MONITORING FUNCTIONS

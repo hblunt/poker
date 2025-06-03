@@ -11,6 +11,374 @@
 #include "scoringsystem.h"
 #include "selftrain.h"
 
+
+
+// Add these functions to selftrain.c
+
+// Initialize self-play statistics tracking
+SelfPlayStats* initializeSelfPlayStats(int maxCheckpoints) {
+    SelfPlayStats *stats = malloc(sizeof(SelfPlayStats));
+    if (!stats) {
+        printf("Error: Could not allocate memory for self-play statistics\n");
+        return NULL;
+    }
+    
+    stats->rewardHistory = malloc(maxCheckpoints * sizeof(double));
+    stats->winRateHistory = malloc(maxCheckpoints * sizeof(double));
+    stats->confidenceHistory = malloc(maxCheckpoints * sizeof(double));
+    stats->experienceLoss = malloc(maxCheckpoints * sizeof(double));
+    stats->strategyStability = malloc(maxCheckpoints * sizeof(double));
+    stats->gamesPlayed = malloc(maxCheckpoints * sizeof(int));
+    
+    if (!stats->rewardHistory || !stats->winRateHistory || !stats->confidenceHistory || 
+        !stats->experienceLoss || !stats->strategyStability || !stats->gamesPlayed) {
+        printf("Error: Could not allocate memory for self-play history\n");
+        free(stats);
+        return NULL;
+    }
+    
+    stats->currentCheckpoint = 0;
+    stats->maxCheckpoints = maxCheckpoints;
+    stats->startTime = clock();
+    
+    // Open log file for self-play progress
+    stats->selfPlayLogFile = fopen("selfplay_loss_log.csv", "w");
+    if (stats->selfPlayLogFile) {
+        fprintf(stats->selfPlayLogFile, "Checkpoint,Games,Avg_Reward,Win_Rate,Network_Confidence,Experience_Loss,Strategy_Stability,Time_Elapsed\n");
+    }
+    
+    printf("Self-play loss tracking initialized for %d checkpoints\n", maxCheckpoints);
+    return stats;
+}
+
+// Calculate MSE loss on recent experiences
+double calculateExperienceLoss(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize) {
+    if (!nn || !rb || rb->size < sampleSize) return 0.0;
+    
+    double totalLoss = 0.0;
+    int samplesUsed = 0;
+    
+    // Sample recent experiences
+    for (int i = 0; i < sampleSize && i < rb->size; i++) {
+        int index = (rb->size - 1 - i) % rb->capacity;  // Get recent experiences
+        Experience *exp = &rb->buffer[index];
+        
+        // Forward pass
+        forwardpropagate(nn, exp->gameState);
+        
+        // Create target based on reward
+        double target[OUTPUT_SIZE];
+        for (int j = 0; j < OUTPUT_SIZE; j++) {
+            target[j] = nn->outputLayer[j].value;  // Current prediction
+        }
+        
+        // Adjust target based on experience outcome
+        if (exp->reward > 0) {
+            target[exp->action] = fmin(1.0, target[exp->action] + 0.1);  // Reinforce good actions
+        } else if (exp->reward < 0) {
+            target[exp->action] = fmax(0.0, target[exp->action] - 0.1);  // Discourage bad actions
+        }
+        
+        // Normalize to probabilities
+        double sum = 0;
+        for (int j = 0; j < OUTPUT_SIZE; j++) sum += target[j];
+        if (sum > 0) {
+            for (int j = 0; j < OUTPUT_SIZE; j++) target[j] /= sum;
+        }
+        
+        // Calculate MSE
+        for (int j = 0; j < OUTPUT_SIZE; j++) {
+            double error = target[j] - nn->outputLayer[j].value;
+            totalLoss += error * error;
+        }
+        samplesUsed++;
+    }
+    
+    return samplesUsed > 0 ? totalLoss / (samplesUsed * OUTPUT_SIZE) : 0.0;
+}
+
+// Calculate network confidence (entropy-based)
+double calculateNetworkConfidence(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize) {
+    if (!nn || !rb || rb->size < sampleSize) return 0.5;
+    
+    double totalConfidence = 0.0;
+    int samplesUsed = 0;
+    
+    for (int i = 0; i < sampleSize && i < rb->size; i++) {
+        int index = (rb->size - 1 - i) % rb->capacity;
+        Experience *exp = &rb->buffer[index];
+        
+        forwardpropagate(nn, exp->gameState);
+        
+        // Calculate confidence as max probability
+        double maxProb = 0.0;
+        for (int j = 0; j < OUTPUT_SIZE; j++) {
+            if (nn->outputLayer[j].value > maxProb) {
+                maxProb = nn->outputLayer[j].value;
+            }
+        }
+        
+        totalConfidence += maxProb;
+        samplesUsed++;
+    }
+    
+    return samplesUsed > 0 ? totalConfidence / samplesUsed : 0.5;
+}
+
+// Calculate strategy stability (how much network output changes)
+double calculateStrategyStability(NeuralNetwork **networks, int numPlayers, 
+                                 ReplayBuffer *rb, int sampleSize) {
+    if (!networks || !rb || rb->size < sampleSize) return 0.0;
+    
+    double totalVariance = 0.0;
+    int samplesUsed = 0;
+    
+    for (int i = 0; i < sampleSize && i < rb->size; i++) {
+        int index = (rb->size - 1 - i) % rb->capacity;
+        Experience *exp = &rb->buffer[index];
+        
+        // Get predictions from all networks for same game state
+        double predictions[MAXPLAYERS][OUTPUT_SIZE];
+        for (int p = 0; p < numPlayers; p++) {
+            forwardpropagate(networks[p], exp->gameState);
+            for (int j = 0; j < OUTPUT_SIZE; j++) {
+                predictions[p][j] = networks[p]->outputLayer[j].value;
+            }
+        }
+        
+        // Calculate variance across networks
+        for (int j = 0; j < OUTPUT_SIZE; j++) {
+            double mean = 0.0;
+            for (int p = 0; p < numPlayers; p++) {
+                mean += predictions[p][j];
+            }
+            mean /= numPlayers;
+            
+            double variance = 0.0;
+            for (int p = 0; p < numPlayers; p++) {
+                double diff = predictions[p][j] - mean;
+                variance += diff * diff;
+            }
+            variance /= numPlayers;
+            totalVariance += variance;
+        }
+        samplesUsed++;
+    }
+    
+    // Return stability (inverse of variance)
+    double avgVariance = samplesUsed > 0 ? totalVariance / (samplesUsed * OUTPUT_SIZE) : 1.0;
+    return fmax(0.0, 1.0 - avgVariance);  // Higher = more stable
+}
+
+// Update self-play statistics
+void updateSelfPlayStats(SelfPlayStats *stats, NeuralNetwork **networks, int numPlayers,
+                        ReplayBuffer *rb, int *wins, int totalGames, double *avgCredits) {
+    if (!stats || stats->currentCheckpoint >= stats->maxCheckpoints) return;
+    
+    int checkpoint = stats->currentCheckpoint;
+    
+    // Calculate average reward from recent experiences
+    double avgReward = 0.0;
+    int recentExperiences = fmin(1000, rb->size);
+    for (int i = 0; i < recentExperiences; i++) {
+        int index = (rb->size - 1 - i) % rb->capacity;
+        avgReward += rb->buffer[index].reward;
+    }
+    avgReward = recentExperiences > 0 ? avgReward / recentExperiences : 0.0;
+    
+    // Calculate current win rate (best AI)
+    double bestWinRate = 0.0;
+    for (int i = 0; i < numPlayers; i++) {
+        double winRate = totalGames > 0 ? (double)wins[i] / totalGames : 0.0;
+        if (winRate > bestWinRate) bestWinRate = winRate;
+    }
+    
+    // Calculate other metrics
+    double confidence = calculateNetworkConfidence(networks[0], rb, 500);
+    double expLoss = calculateExperienceLoss(networks[0], rb, 500);
+    double stability = calculateStrategyStability(networks, numPlayers, rb, 200);
+    
+    // Store in history
+    stats->rewardHistory[checkpoint] = avgReward;
+    stats->winRateHistory[checkpoint] = bestWinRate;
+    stats->confidenceHistory[checkpoint] = confidence;
+    stats->experienceLoss[checkpoint] = expLoss;
+    stats->strategyStability[checkpoint] = stability;
+    stats->gamesPlayed[checkpoint] = totalGames;
+    
+    // Calculate elapsed time
+    clock_t currentTime = clock();
+    double elapsedSeconds = ((double)(currentTime - stats->startTime)) / CLOCKS_PER_SEC;
+    
+    // Log to file
+    if (stats->selfPlayLogFile) {
+        fprintf(stats->selfPlayLogFile, "%d,%d,%.4f,%.4f,%.4f,%.6f,%.4f,%.2f\n",
+                checkpoint, totalGames, avgReward, bestWinRate, confidence, 
+                expLoss, stability, elapsedSeconds);
+        fflush(stats->selfPlayLogFile);
+    }
+    
+    stats->currentCheckpoint++;
+}
+
+// Display self-play training progress with loss information
+void displaySelfPlayProgress(SelfPlayStats *stats, int currentGame, int totalGames,
+                           int *wins, int numPlayers, double *avgCredits, int bufferSize) {
+    if (!stats || stats->currentCheckpoint == 0) return;
+    
+    int latest = stats->currentCheckpoint - 1;
+    
+    printf("\n");
+    printRepeatedChar('=', 60);
+    printf("\n");
+    printf("SELF-PLAY LEARNING PROGRESS: Game %d/%d (%.1f%%)\n", 
+           currentGame, totalGames, (currentGame * 100.0) / totalGames);
+    printRepeatedChar('=', 60);
+    printf("\n");
+    
+    // Loss-like metrics
+    printf("LEARNING METRICS:\n");
+    printf("  Experience Loss:     %.6f", stats->experienceLoss[latest]);
+    if (latest > 0) {
+        double change = stats->experienceLoss[latest] - stats->experienceLoss[latest-1];
+        printf(" (%s%.6f)", change < 0 ? "" : "+", change);
+        if (change < -0.001) printf(" IMPROVING");
+        else if (change > 0.001) printf(" DEGRADING");
+        else printf(" STABLE");
+    }
+    printf("\n");
+    
+    printf("  Average Reward:      %.4f", stats->rewardHistory[latest]);
+    if (latest > 0) {
+        double change = stats->rewardHistory[latest] - stats->rewardHistory[latest-1];
+        printf(" (%s%.4f)", change < 0 ? "" : "+", change);
+        if (change > 0.01) printf(" IMPROVING");
+        else if (change < -0.01) printf(" DEGRADING");
+        else printf(" STABLE");
+    }
+    printf("\n");
+    
+    printf("  Network Confidence:  %.4f (%.1f%%)", 
+           stats->confidenceHistory[latest], stats->confidenceHistory[latest] * 100);
+    if (latest > 0) {
+        double change = stats->confidenceHistory[latest] - stats->confidenceHistory[latest-1];
+        if (change > 0.01) printf(" ↑ MORE DECISIVE");
+        else if (change < -0.01) printf(" ↓ LESS DECISIVE");
+        else printf(" → STABLE");
+    }
+    printf("\n");
+    
+    printf("  Strategy Stability:  %.4f (%.1f%%)", 
+           stats->strategyStability[latest], stats->strategyStability[latest] * 100);
+    if (latest > 0) {
+        double change = stats->strategyStability[latest] - stats->strategyStability[latest-1];
+        if (change > 0.01) printf(" ↑ CONVERGING");
+        else if (change < -0.01) printf(" ↓ DIVERGING");
+        else printf(" → STABLE");
+    }
+    printf("\n");
+    
+    // Win rates
+    printf("\nWIN RATE PROGRESSION:\n");
+    for (int i = 0; i < numPlayers; i++) {
+        double winRate = (double)wins[i] / currentGame;
+        printf("  AI_%d: %.1f%% (%d wins) | Credits: %.0f\n", 
+               i, winRate * 100, wins[i], avgCredits[i]);
+    }
+    
+    printf("\nExperience buffer: %d samples\n", bufferSize);
+    printf("Detailed log: selfplay_loss_log.csv\n");
+    printRepeatedChar('=', 60);
+    printf("\n");
+}
+
+// Display final self-play summary
+void displaySelfPlaySummary(SelfPlayStats *stats, int totalGames, int *wins, 
+                           int numPlayers, double *avgCredits) {
+    if (!stats || stats->currentCheckpoint == 0) return;
+    
+    printf("\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    printf("SELF-PLAY LEARNING COMPLETE!\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+    
+    // Learning progression analysis
+    int first = 0;
+    int last = stats->currentCheckpoint - 1;
+    
+    printf("LEARNING PROGRESSION:\n");
+    printf("Initial Experience Loss:  %.6f\n", stats->experienceLoss[first]);
+    printf("Final Experience Loss:    %.6f\n", stats->experienceLoss[last]);
+    printf("Experience Loss Change:   %.6f", stats->experienceLoss[last] - stats->experienceLoss[first]);
+    if (stats->experienceLoss[last] < stats->experienceLoss[first]) {
+        printf(" (%.1f%% improvement)\n", 
+               ((stats->experienceLoss[first] - stats->experienceLoss[last]) / stats->experienceLoss[first]) * 100);
+    } else {
+        printf(" (%.1f%% increase)\n", 
+               ((stats->experienceLoss[last] - stats->experienceLoss[first]) / stats->experienceLoss[first]) * 100);
+    }
+    
+    printf("\nREWARD PROGRESSION:\n");
+    printf("Initial Avg Reward:       %.4f\n", stats->rewardHistory[first]);
+    printf("Final Avg Reward:         %.4f\n", stats->rewardHistory[last]);
+    printf("Reward Improvement:       %.4f\n", stats->rewardHistory[last] - stats->rewardHistory[first]);
+    
+    printf("\nSTRATEGY ANALYSIS:\n");
+    printf("Final Network Confidence: %.1f%% (", stats->confidenceHistory[last] * 100);
+    if (stats->confidenceHistory[last] > 0.7) {
+        printf("Very Decisive)\n");
+    } else if (stats->confidenceHistory[last] > 0.5) {
+        printf("Moderately Decisive)\n");
+    } else {
+        printf("Uncertain/Exploratory)\n");
+    }
+    
+    printf("Strategy Stability:       %.1f%% (", stats->strategyStability[last] * 100);
+    if (stats->strategyStability[last] > 0.8) {
+        printf("Highly Converged)\n");
+    } else if (stats->strategyStability[last] > 0.6) {
+        printf("Moderately Stable)\n");
+    } else {
+        printf("Still Evolving)\n");
+    }
+    
+    // Find best performing AI
+    int bestAI = 0;
+    int maxWins = wins[0];
+    for (int i = 1; i < numPlayers; i++) {
+        if (wins[i] > maxWins) {
+            maxWins = wins[i];
+            bestAI = i;
+        }
+    }
+    
+    printf("\nFINAL RESULTS:\n");
+    printf("Best AI: AI_%d (%.1f%% win rate)\n", bestAI, (wins[bestAI] * 100.0) / totalGames);
+    printf("Total games: %d\n", totalGames);
+    printf("Training log: selfplay_loss_log.csv\n");
+    printRepeatedChar('=', 70);
+    printf("\n");
+}
+
+// Free self-play statistics
+void freeSelfPlayStats(SelfPlayStats *stats) {
+    if (!stats) return;
+    
+    if (stats->selfPlayLogFile) {
+        fclose(stats->selfPlayLogFile);
+    }
+    
+    free(stats->rewardHistory);
+    free(stats->winRateHistory);
+    free(stats->confidenceHistory);
+    free(stats->experienceLoss);
+    free(stats->strategyStability);
+    free(stats->gamesPlayed);
+    free(stats);
+}
+
 // ===================================================================
 // CORE REPLAY BUFFER AND UTILITY FUNCTIONS
 // ===================================================================
