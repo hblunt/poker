@@ -326,7 +326,7 @@ void displaySelfPlayProgress(SelfPlayStats *stats, int currentGame, int totalGam
         double change = stats->confidenceHistory[latest] - stats->confidenceHistory[latest-1];
         if (change > 0.01) printf(" MORE DECISIVE");
         else if (change < -0.01) printf(" LESS DECISIVE");
-        else printf(" → STABLE");
+        else printf(" STABLE");
     }
     printf("\n");
     
@@ -336,7 +336,7 @@ void displaySelfPlayProgress(SelfPlayStats *stats, int currentGame, int totalGam
         double change = stats->strategyStability[latest] - stats->strategyStability[latest-1];
         if (change > 0.01) printf(" CONVERGING");
         else if (change < -0.01) printf(" DIVERGING");
-        else printf(" → STABLE");
+        else printf(" STABLE");
     }
     printf("\n");
     

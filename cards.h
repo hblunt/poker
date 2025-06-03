@@ -35,7 +35,6 @@ void shuffle(Hand *h);
 void printCard(char *str, Card *c);
 void printHand(char *str, Hand *h);
 Hand *createDeck(int numpacks, int shuffled);
-void sortHand(Hand *h);
 void freeHand(Hand *h, int delCards);
 void cardValString(char s[], int val);
 

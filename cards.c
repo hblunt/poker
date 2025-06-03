@@ -190,11 +190,6 @@ Hand *createDeck(int numpacks, int shuffled) {
     return deck;
 }
 
-// Sort cards in a hand (not implemented yet)
-void sortHand(Hand *h) {
-    // Not implemented in the original code
-}
-
 // Free a hand and optionally its cards
 void freeHand(Hand *h, int delCards) {
     if (h == NULL) return;

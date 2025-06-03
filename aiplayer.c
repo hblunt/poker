@@ -1,4 +1,3 @@
-// Clean Enhanced aiplayer.c - replace your existing aiplayer.c with this complete version
 #include "neuralnetwork.h"
 #include "player.h"
 #include "game.h"
@@ -7,62 +6,24 @@
 NeuralNetwork *aiNetwork = NULL;
 
 // Initialize AI with enhanced network
-
 void initialiseAI() {
-    printf("Loading AI system...\n");
-    
-    // New loading priority: Evolved > Bootstrap > Create new
-    printf("Looking for trained AI networks...\n");
     
     // First try to load evolved AI (best trained network)
     aiNetwork = loadNetwork("poker_ai_evolved.dat");
     if (aiNetwork) {
-        printf("✓ Loaded evolved AI (self-trained through pure reinforcement learning)\n");
-        printf("  This AI discovered its own strategy through thousands of games!\n");
+        printf(" Loaded AI successfully\n");
         return;
-    }
-    
-    // Try to load any of the evolved backups
-    for (int i = 0; i < 6; i++) {
-        char filename[100];
-        sprintf(filename, "evolved_ai_%d.dat", i);
-        aiNetwork = loadNetwork(filename);
-        if (aiNetwork) {
-            printf("✓ Loaded evolved AI backup %d\n", i);
-            printf("  This AI was trained through pure self-play learning.\n");
-            return;
-        }
     }
     
     // Try to load bootstrap network
     aiNetwork = loadNetwork("poker_ai_bootstrap.dat");
     if (aiNetwork) {
-        printf("⚠ Loaded bootstrap AI (basic rules only)\n");
-        printf("  This AI only knows basic rules - consider running training!\n");
-        return;
-    }
-    
-    // Try legacy networks for backward compatibility
-    aiNetwork = loadNetwork("poker_ai_enhanced_monitored.dat");
-    if (aiNetwork) {
-        printf("⚠ Loaded legacy enhanced AI (old training method)\n");
-        printf("  Consider retraining with new two-phase approach.\n");
-        return;
-    }
-    
-    aiNetwork = loadNetwork("poker_ai_selfplay_monitored.dat");
-    if (aiNetwork) {
-        printf("⚠ Loaded legacy self-play AI (old training method)\n");
-        printf("  Consider retraining with new two-phase approach.\n");
+        printf(" Loaded bootstrap AI (basic rules only)\n");
         return;
     }
     
     // Last resort - create fresh network
-    printf("❌ No trained AI networks found.\n");
-    printf("Creating fresh neural network with random weights...\n");
-    printf("⚠ WARNING: Untrained AI will make random decisions!\n");
-    printf("💡 TIP: Use option 2 to train the AI first.\n");
-    aiNetwork = createNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    printf(" No trained AI networks found.\n");
 }
 
 // Enhanced AI decision making
@@ -175,8 +136,8 @@ bool aiPredictionRound(Player players[], int numPlayers, int *pot, int roundNum,
 
                 case 2: // Raise
                     // Smarter raise sizing based on hand strength and situation
-                    int baseRaise = 2 * BIG_BLIND;
-                    if (roundNum <= 1) baseRaise = 3 * BIG_BLIND;  // Bigger pre-flop raises
+                    int baseRaise = 1.2 * BIG_BLIND;
+                    if (roundNum <= 1) baseRaise = 1.8 * BIG_BLIND;  // Bigger pre-flop raises
                     
                     int raiseAmount = *currentBetAmount + baseRaise;
                     

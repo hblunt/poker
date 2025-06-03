@@ -111,17 +111,12 @@ void saveNetwork(NeuralNetwork *nn, const char *filename);
 NeuralNetwork* loadNetwork(const char *filename);
 void printNetworkState(NeuralNetwork *nn);
 
-// ===================================================================
-// ENHANCED GAME INTEGRATION FUNCTIONS
-// ===================================================================
-
 // Opponent modeling
 void initializeOpponentProfiles(int numPlayers);
 void updateOpponentProfile(int playerIndex, int action, bool voluntaryAction, int betAmount, int potSize);
 
 // Enhanced game state encoding
-void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int currentBet, 
-                           int numPlayers, int position, double *output);
+void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int currentBet, int numPlayers, int position, double *output);
 
 // Poker-specific analysis functions
 double calculateHandPotential(Card playerCards[], Card communityCards[], int numCommunity);
@@ -130,12 +125,7 @@ void resetRoundAggression();
 void analyzeNetworkConfidence(NeuralNetwork *nn, double **inputs, int numSamples);
 
 // Enhanced decision making
-int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
-                        int pot, int currentBet, int numPlayers, int position);
-
-// ===================================================================
-// NEW TWO-PHASE TRAINING SYSTEM
-// ===================================================================
+int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, int pot, int currentBet, int numPlayers, int position);
 
 // Two-phase training functions
 void trainTwoPhaseAI(int numGames, int numPlayers);
@@ -145,35 +135,13 @@ void pureReinforcementLearning(int numGames, int numPlayers);
 // Bootstrap data generation
 void generateMinimalBootstrap(double **inputs, double **outputs, int numSamples);
 
-// ===================================================================
-// TRAINING MONITORING FUNCTIONS
-// ===================================================================
-
 // Training statistics management
 TrainingStats* initializeTrainingStats(int maxEpochs);
 double calculateLoss(NeuralNetwork *nn, double **inputs, double **targets, int numSamples);
 double calculateAccuracy(NeuralNetwork *nn, double **inputs, double **targets, int numSamples);
-void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **inputs, 
-                        double **targets, int numSamples, double learningRate);
-
-// Training progress display
-void displayTrainingProgress(TrainingStats *stats, bool verbose);
-void displayTrainingSummary(TrainingStats *stats, NeuralNetwork *nn, double **inputs, int numSamples);
-
-// Core monitored training function
-void trainWithMonitoring(NeuralNetwork *nn, double **trainingInputs, double **trainingOutputs, 
-                        int numSamples, int epochs);
+void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **inputs, double **targets, int numSamples, double learningRate);
 
 // Utility functions
 void printRepeatedChar(char c, int count);
 
-// ===================================================================
-// LEGACY FUNCTIONS (DEPRECATED - kept for compatibility)
-// ===================================================================
-
-// Old training functions - will be removed in future versions
-void trainEnhancedBasicAIWithMonitoring();  // DEPRECATED: Use trainTwoPhaseAI instead
-void enhancedSelfPlayTrainingWithMonitoring(int numGames, int numPlayers);  // DEPRECATED
-void generateEnhancedTrainingData(double **inputs, double **outputs, int numSamples);  // DEPRECATED
-
-#endif // NEURALNETWORK_H
+#endif
