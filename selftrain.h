@@ -70,12 +70,11 @@ void updateRewards(ReplayBuffer *rb, int startIndex, GameRecord *record);
 
 // Stats
 SelfPlayStats* initializeSelfPlayStats(int maxCheckpoints);
-double calculateExperienceLoss(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize);
 double calculateNetworkConfidence(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize);
 double calculateStrategyStability(NeuralNetwork **networks, int numPlayers, ReplayBuffer *rb, int sampleSize);
 void updateSelfPlayStats(SelfPlayStats *stats, NeuralNetwork **networks, int numPlayers,ReplayBuffer *rb, int *wins, int totalGames, double *avgCredits);
 void displaySelfPlayProgress(SelfPlayStats *stats, int currentGame, int totalGames,int *wins, int numPlayers, double *avgCredits, int bufferSize);
 void displaySelfPlaySummary(SelfPlayStats *stats, int totalGames, int *wins, int numPlayers, double *avgCredits);
-void freeSelfPlayStats(SelfPlayStats *stats);
+void freeStats(SelfPlayStats *stats);
 
 #endif

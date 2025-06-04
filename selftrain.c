@@ -47,61 +47,6 @@ SelfPlayStats* initializeSelfPlayStats(int maxCheckpoints) {
     return stats;
 }
 
-double calculateExperienceLoss(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize) {
-    if (!nn || !rb || rb->size < 10) return 0.0;  // Need minimum samples
-    
-    double totalLoss = 0.0;
-    int samplesUsed = 0;
-    int validSamples = 0;
-    
-    // Use smaller sample size to avoid issues
-    int actualSampleSize = fmin(sampleSize, fmin(500, rb->size));
-    
-    for (int i = 0; i < actualSampleSize; i++) {
-        int index = (rb->size - 1 - i) % rb->capacity;
-        Experience *exp = &rb->buffer[index];
-        
-        // Skip experiences with zero reward (not yet processed)
-        if (exp->reward == 0.0) continue;
-        
-        // Forward pass
-        forwardpropagate(nn, exp->gameState);
-        
-        // Check for invalid network outputs
-        bool validOutput = true;
-        for (int j = 0; j < OUTPUT_SIZE; j++) {
-            if (isnan(nn->outputLayer[j].value) || isinf(nn->outputLayer[j].value)) {
-                validOutput = false;
-                break;
-            }
-        }
-        if (!validOutput) continue;
-        
-        // Create simple target: boost the action that was taken based on reward
-        double target[OUTPUT_SIZE];
-        for (int j = 0; j < OUTPUT_SIZE; j++) {
-            target[j] = nn->outputLayer[j].value;
-        }
-        
-        // Simple adjustment based on reward
-        double adjustment = exp->reward * 0.1;  // Scale reward
-        target[exp->action] = fmax(0.01, fmin(0.99, target[exp->action] + adjustment));
-        
-        // Calculate MSE for this sample
-        double sampleLoss = 0.0;
-        for (int j = 0; j < OUTPUT_SIZE; j++) {
-            double error = target[j] - nn->outputLayer[j].value;
-            sampleLoss += error * error;
-        }
-        
-        totalLoss += sampleLoss / OUTPUT_SIZE;
-        validSamples++;
-        samplesUsed++;
-    }
-    
-    return validSamples > 0 ? totalLoss / validSamples : 0.0;
-}
-
 // Calculate network confidence (decisiveness)
 double calculateNetworkConfidence(NeuralNetwork *nn, ReplayBuffer *rb, int sampleSize) {
     if (!nn || !rb || rb->size < 10) return 0.5;
@@ -253,14 +198,12 @@ void updateSelfPlayStats(SelfPlayStats *stats, NeuralNetwork **networks, int num
     
     // Calculate other metrics
     double confidence = calculateNetworkConfidence(networks[0], rb, 500);
-    double expLoss = calculateExperienceLoss(networks[0], rb, 500);
     double stability = calculateStrategyStability(networks, numPlayers, rb, 200);
     
     // Store in history
     stats->rewardHistory[checkpoint] = avgReward;
     stats->winRateHistory[checkpoint] = bestWinRate;
     stats->confidenceHistory[checkpoint] = confidence;
-    stats->experienceLoss[checkpoint] = expLoss;
     stats->strategyStability[checkpoint] = stability;
     stats->gamesPlayed[checkpoint] = totalGames;
     
@@ -270,18 +213,15 @@ void updateSelfPlayStats(SelfPlayStats *stats, NeuralNetwork **networks, int num
     
     // Log to file
     if (stats->selfPlayLogFile) {
-        fprintf(stats->selfPlayLogFile, "%d,%d,%.4f,%.4f,%.4f,%.6f,%.4f,%.2f\n",
-                checkpoint, totalGames, avgReward, bestWinRate, confidence, 
-                expLoss, stability, elapsedSeconds);
+        fprintf(stats->selfPlayLogFile, "%d,%d,%.4f,%.4f,%.4f,%.6f,%.4f,%.2f\n", checkpoint, totalGames, avgReward, bestWinRate, confidence, stability, elapsedSeconds);
         fflush(stats->selfPlayLogFile);
     }
     
     stats->currentCheckpoint++;
 }
 
-// Display self-play training progress with loss information
-void displaySelfPlayProgress(SelfPlayStats *stats, int currentGame, int totalGames,
-                           int *wins, int numPlayers, double *avgCredits, int bufferSize) {
+// Display self-play training progress
+void displaySelfPlayProgress(SelfPlayStats *stats, int currentGame, int totalGames, int *wins, int numPlayers, double *avgCredits, int bufferSize) {
     if (!stats || stats->currentCheckpoint == 0) return;
     
     int latest = stats->currentCheckpoint - 1;
@@ -292,18 +232,6 @@ void displaySelfPlayProgress(SelfPlayStats *stats, int currentGame, int totalGam
     printf("SELF-PLAY LEARNING PROGRESS: Game %d/%d (%.1f%%)\n", 
            currentGame, totalGames, (currentGame * 100.0) / totalGames);
     printRepeatedChar('=', 60);
-    printf("\n");
-    
-    // Loss-like metrics
-    printf("LEARNING METRICS:\n");
-    printf("  Experience Loss:     %.6f", stats->experienceLoss[latest]);
-    if (latest > 0) {
-        double change = stats->experienceLoss[latest] - stats->experienceLoss[latest-1];
-        printf(" (%s%.6f)", change < 0 ? "" : "+", change);
-        if (change < -0.001) printf(" IMPROVING");
-        else if (change > 0.001) printf(" DEGRADING");
-        else printf(" STABLE");
-    }
     printf("\n");
     
     printf("  Average Reward:      %.4f", stats->rewardHistory[latest]);
@@ -366,18 +294,6 @@ void displaySelfPlaySummary(SelfPlayStats *stats, int totalGames, int *wins,
     int first = 0;
     int last = stats->currentCheckpoint - 1;
     
-    printf("LEARNING PROGRESSION:\n");
-    printf("Initial Experience Loss:  %.6f\n", stats->experienceLoss[first]);
-    printf("Final Experience Loss:    %.6f\n", stats->experienceLoss[last]);
-    printf("Experience Loss Change:   %.6f", stats->experienceLoss[last] - stats->experienceLoss[first]);
-    if (stats->experienceLoss[last] < stats->experienceLoss[first]) {
-        printf(" (%.1f%% improvement)\n", 
-               ((stats->experienceLoss[first] - stats->experienceLoss[last]) / stats->experienceLoss[first]) * 100);
-    } else {
-        printf(" (%.1f%% increase)\n", 
-               ((stats->experienceLoss[last] - stats->experienceLoss[first]) / stats->experienceLoss[first]) * 100);
-    }
-    
     printf("\nREWARD PROGRESSION:\n");
     printf("Initial Avg Reward:       %.4f\n", stats->rewardHistory[first]);
     printf("Final Avg Reward:         %.4f\n", stats->rewardHistory[last]);
@@ -421,7 +337,7 @@ void displaySelfPlaySummary(SelfPlayStats *stats, int totalGames, int *wins,
 }
 
 // Free self-play statistics
-void freeSelfPlayStats(SelfPlayStats *stats) {
+void freeStats(SelfPlayStats *stats) {
     if (!stats) return;
     
     if (stats->selfPlayLogFile) {

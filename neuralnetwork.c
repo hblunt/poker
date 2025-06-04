@@ -368,7 +368,6 @@ int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards
     }
     
     // Add some controlled randomness to prevent predictability
-    // This replaces pure randomness with informed randomness
     double randomFactor = (double)rand() / RAND_MAX;
     if (randomFactor < 0.1) {  // 10% chance of second-best move
         double secondBest = 0.0;
@@ -389,10 +388,6 @@ int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards
     
     return bestAction;
 }
-
-// ===================================================================
-// OPPONENT MODELING FUNCTIONS
-// ===================================================================
 
 // Initialize opponent profiles at start of game
 void initializeOpponentProfiles(int numPlayers) {
@@ -435,7 +430,7 @@ void updateOpponentProfile(int playerIndex, int action, bool voluntaryAction, in
             profile->raiseCount++;
             profile->voluntaryPuts++;
             
-            // NEW: Track recent aggression
+            // Track recent aggression
             profile->lastAggressiveAmount = betAmount;
             profile->aggressiveActionThisRound = true;
             break;
@@ -446,7 +441,7 @@ void updateOpponentProfile(int playerIndex, int action, bool voluntaryAction, in
         profile->aggressionLevel = (double)(profile->raiseCount) / profile->totalActions;
         profile->foldToRaise = (double)(profile->foldCount) / profile->totalActions;
         
-        // Calculate tightness (how selective they are)
+        // Calculate tightness
         if (profile->handsPlayed > 0) {
             profile->tightness = 1.0 - ((double)profile->voluntaryPuts / profile->handsPlayed);
         }
@@ -493,7 +488,7 @@ double calculateHandPotential(Card playerCards[], Card communityCards[], int num
         }
     }
     
-    // Check for straight draws (simplified)
+    // Check for straight draws
     int consecutive = 0;
     int maxConsecutive = 0;
     for (int i = 1; i <= 13; i++) {
@@ -521,7 +516,7 @@ double calculateHandPotential(Card playerCards[], Card communityCards[], int num
     return potential;
 }
 
-// Calculate board texture (how coordinated/dangerous the board is)
+// Calculate board texture (how dangerous the board is)
 double calculateBoardTexture(Card communityCards[], int numCommunity) {
     if (numCommunity < 3) return 0.5;  // Pre-flop
     
@@ -551,7 +546,7 @@ double calculateBoardTexture(Card communityCards[], int numCommunity) {
         }
     }
     
-    // Check for straight possibilities (simplified)
+    // Check for straight possibilities
     int consecutive = 0;
     for (int i = 1; i <= 13; i++) {
         if (values[i] > 0) {
@@ -564,10 +559,6 @@ double calculateBoardTexture(Card communityCards[], int numCommunity) {
     
     return fmin(texture, 1.0);
 }
-
-// ===================================================================
-// NETWORK FILE I/O AND UTILITY FUNCTIONS
-// ===================================================================
 
 void saveNetwork(NeuralNetwork *nn, const char *filename)
 {
@@ -684,11 +675,7 @@ void printNetworkState(NeuralNetwork *nn) {
            (nn->outputLayer[1].value > nn->outputLayer[2].value ? "CALL" : "RAISE"));
 }
 
-// ===================================================================
-// TRAINING MONITORING FUNCTIONS
-// ===================================================================
-
-// Add this helper function at the top of the file, after the includes
+// Helper function
 void printRepeatedChar(char c, int count) {
     for (int i = 0; i < count; i++) {
         printf("%c", c);
@@ -714,12 +701,10 @@ TrainingStats* initializeTrainingStats(int maxEpochs) {
     
     stats->currentEpoch = 0;
     stats->maxEpochs = maxEpochs;
-    stats->bestLoss = 1000000.0;  // Initialize to very high value
     stats->bestEpoch = 0;
-    stats->initialLoss = 0.0;
     stats->startTime = clock();
     
-    // NEW: Overfitting detection
+    // Overfitting detection (old)
     stats->recentLossAverage = 0.0;
     stats->overfittingDetected = false;
     stats->stagnationCount = 0;
@@ -736,7 +721,7 @@ TrainingStats* initializeTrainingStats(int maxEpochs) {
     return stats;
 }
 
-// Calculate mean squared error loss
+// Calculate mean squared error loss (only for bootstrap training)
 double calculateLoss(NeuralNetwork *nn, double **inputs, double **targets, int numSamples) {
     double totalLoss = 0.0;
     
@@ -904,10 +889,6 @@ void analyzeNetworkConfidence(NeuralNetwork *nn, double **inputs, int numSamples
         printf("→ MODERATE: Reasonable action balance\n");
     }
 }
-
-// ===================================================================
-// MINIMAL BOOTSTRAP TRAINING (PHASE 1)
-// ===================================================================
 
 // Generate minimal bootstrap data - just basic rules to prevent crashes
 void generateMinimalBootstrap(double **inputs, double **outputs, int numSamples) {
@@ -1117,11 +1098,11 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     
     ReplayBuffer *rb = createReplayBuffer(100000);
     
-    // Initialize self-play loss tracking *** NEW ***
+    // Initialize self-play tracking
     int progressCheckpoints = 20;
     SelfPlayStats *lossStats = initializeSelfPlayStats(progressCheckpoints);
     if (!lossStats) {
-        printf("Warning: Could not initialize loss tracking, continuing without it...\n");
+        printf("Warning: Could not initialize tracking, continuing without it...\n");
     }
     
     // Training tracking
@@ -1136,8 +1117,7 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     
     clock_t startTime = clock();
     
-    printf("Starting pure self-play learning with loss monitoring...\n");
-    printf("Each AI will develop its own strategy through experience!\n\n");
+    printf("Starting pure self-play learning...\n");
     
     // Main self-play training loop
     for (int game = 0; game < numGames; game++) {
@@ -1156,12 +1136,12 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
             }
         }
         
-        // Enhanced progress monitoring with loss tracking *** MODIFIED ***
+        // Progress monitoring
         if (game > 0 && (game % gamesPerCheckpoint == 0 || game == numGames - 1)) {
             clock_t currentTime = clock();
             double elapsed = ((double)(currentTime - startTime)) / CLOCKS_PER_SEC;
             
-            // Update self-play loss statistics *** NEW ***
+            // Update self-play stats
             if (lossStats) {
                 updateSelfPlayStats(lossStats, networks, numPlayers, rb, wins, game, avgCredits);
                 displaySelfPlayProgress(lossStats, game, numGames, wins, numPlayers, avgCredits, rb->size);
@@ -1218,7 +1198,7 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     printf("Games played: %d\n", numGames);
     printf("Experience samples: %d\n", rb->size);
     
-    // Enhanced final summary with loss information *** NEW ***
+    // Final summary
     if (lossStats) {
         displaySelfPlaySummary(lossStats, numGames, wins, numPlayers, avgCredits);
     }
@@ -1239,7 +1219,6 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     }
     
     printf("\nBest evolved AI: AI_%d (%.1f%% win rate)\n", bestAI, (wins[bestAI] * 100.0) / numGames);
-    printf("This AI discovered its own strategy through pure self-play!\n");
     
     // Save the best evolved network
     saveNetwork(networks[bestAI], "poker_ai_evolved.dat");
@@ -1252,15 +1231,15 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
         saveNetwork(networks[i], filename);
     }
     
-    printf("All evolved AIs saved.\n");
+    printf("All AIs saved.\n");
     printf("Training logs: selfplay_progress.csv, selfplay_loss_log.csv\n");
     printRepeatedChar('=', 70);
     printf("\n");
     
-    // Cleanup *** MODIFIED ***
+    // Cleanup
     if (progressFile) fclose(progressFile);
     if (bootstrap) freeNetwork(bootstrap);
-    if (lossStats) freeSelfPlayStats(lossStats);  // *** NEW ***
+    if (lossStats) freeStats(lossStats); 
     for (int i = 0; i < numPlayers; i++) {
         freeNetwork(networks[i]);
     }
@@ -1303,7 +1282,7 @@ void trainTwoPhaseAI(int numGames, int numPlayers) {
     printf("Your AI has learned through pure self-play!\n");
     printf("Files created:\n");
     printf("  - poker_ai_bootstrap.dat (Phase 1 result)\n");
-    printf("  - poker_ai_evolved.dat (Final self-play champion)\n");
+    printf("  - poker_ai_evolved.dat (Final self-play result)\n");
     printf("  - evolved_ai_0.dat through evolved_ai_3.dat (All trained AIs)\n");
     printf("  - selfplay_progress.csv (Training progress log)\n");
     printRepeatedChar('*', 70);
