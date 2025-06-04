@@ -11,7 +11,6 @@
 #include "aiplayer.h"
 #include "selftrain.h"
 
-
 int main(void) {
     int numPlayers;
     Player players[MAXPLAYERS];
@@ -34,7 +33,7 @@ int main(void) {
 
     switch(choice) {
         case '1':
-            printf("\n[AI] Loading AI system...\n");
+            printf("\n[AI] Loading network...\n");
             initialiseAI();
             numPlayers = setupWithAI(players);
             break;
@@ -42,13 +41,12 @@ int main(void) {
         case '2':
             printf("\n[TWO-PHASE] Starting two-phase AI training...\n");
             printf("Phase 1: Minimal bootstrap (basic rules)\n");
-            printf("Phase 2: Pure self-play learning (strategy discovery)\n\n");
+            printf("Phase 2: Self-play learning (strategy discovery)\n\n");
             
-            int games = 1000;  // Fixed number of gamesgcc
-            int aiPlayers = 4;  // Fixed number of AIs
+            int games = 1000;
+            int aiPlayers = 4;
             
             printf("Configuration: %d games with %d AIs\n", games, aiPlayers);
-            printf("Estimated time: 10-30 minutes\n");
             printf("Press Enter to start training...");
             getchar();
             
@@ -69,12 +67,12 @@ int main(void) {
             break;
 
         case '3':
-            printf("\n[HUMAN] Setting up human-only game...\n");
+            printf("\nSetting up human-only game...\n");
             numPlayers = setup(players);
             break;
 
         default:
-            printf("\n[ERROR] Invalid choice. Starting human-only game...\n");
+            printf("\nInvalid choice. Starting human-only game...\n");
             numPlayers = setup(players);
             break;
     }
@@ -104,10 +102,10 @@ int main(void) {
 
     // Play the game
     if (hasAI) {
-        printf("[AI] AI-enhanced game starting...\n");
+        printf("AI game starting...\n");
         playHandAI(numPlayers, players);
     } else {
-        printf("[HUMAN] Human-only game starting...\n");
+        printf("Game starting...\n");
         playHand(numPlayers, players);
     }
 
@@ -515,7 +513,7 @@ int findNextActivePlayer(Player players[], int numPlayers, int currentPos, int o
         count++;
     }
 
-    // If we get here, there's no active player (should never happen)
+    // No active player (should never happen)
     return currentPos;
 }
 
@@ -593,7 +591,7 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
         }
 
         scanf(" %c", &input);
-        clearInputBuffer();  // Clear the input buffer
+        clearInputBuffer();
 
         switch(input) {
             case 'C':
@@ -625,7 +623,7 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
             case 'r':
                 printf("How much would you like to raise to? (Current bet: %d) ", *currentBetAmount);
                 scanf("%s", predictionAmount);
-                clearInputBuffer();  // Clear the input buffer
+                clearInputBuffer();
                 prediction = atoi(predictionAmount);
 
                 // Validate raise amount
@@ -679,8 +677,6 @@ bool predictionRound(Player players[], int numPlayers, int *pot, int roundNum, H
         }
 
         printf("%s, you now have %d credits\n\n", players[currentPlayer].name, players[currentPlayer].credits);
-
-
 
         // Check if player is all-in
         if (players[currentPlayer].credits == 0 && players[currentPlayer].status == ACTIVE) {
@@ -802,7 +798,6 @@ int endGame(Player players[], int numPlayers, int pot, Hand* communityCards) {
         }
 
         // Play another hand
-
         bool hasAI = false;
         for (int i = 0; i < numPlayers; i++) {
             if (strncmp(players[i].name, "AI ", 3) == 0) {

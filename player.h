@@ -19,8 +19,8 @@ typedef struct {
     Status status;
     char cards[2][3];
     Hand *hand;
-    bool dealer;        // Indicates if this player is the current dealer
-    int currentBet;     // Tracks how much the player has bet in the current round
+    bool dealer;
+    int currentBet;
 } Player;
 
 void clearInputBuffer();

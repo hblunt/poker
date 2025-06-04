@@ -8,10 +8,6 @@
 static OpponentProfile opponentProfiles[MAXPLAYERS];
 static bool profilesInitialized = false;
 
-// ===================================================================
-// CORE NEURAL NETWORK FUNCTIONS
-// ===================================================================
-
 // Create a NN (memory allocation)
 NeuralNetwork* createNetwork(int inputSize, int hiddenSize, int outputSize)
 {
@@ -216,12 +212,8 @@ void updateWeights(NeuralNetwork *nn)
     }
 }
 
-// ===================================================================
-// ENHANCED GAME STATE ENCODING AND DECISION MAKING
-// ===================================================================
-
 // Enhanced game state encoding function
-void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int currentBet, 
+void encodeGameState(Player *player, Hand *communityCards, int pot, int currentBet, 
                            int numPlayers, int position, double *output) {
     memset(output, 0, INPUT_SIZE * sizeof(double));
     
@@ -254,7 +246,7 @@ void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int 
     // Calculate hand score
     HandScore score = findBestHand(combined, numCards);
     
-    // FEATURE 0: Hand strength (improved)
+    // FEATURE 0: Hand strength
     output[0] = (double)score.rank / 10.0;
     
     // FEATURE 1: Hand potential
@@ -325,7 +317,7 @@ void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int 
         }
     }
     
-    // FEATURE 17: Recent opponent aggression (NEW IMPLEMENTATION)
+    // FEATURE 17: Recent opponent aggression
     if (profilesInitialized && pot > 0) {
         double recentAggression = 0.0;
         
@@ -340,12 +332,12 @@ void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int 
         output[17] = fmin(recentAggression, 1.0);
     }
     
-    // FEATURE 18: Pair in hand (RENUMBERED from 20)
+    // FEATURE 18: Pair in hand
     if (cardCount >= 2) {
         output[18] = (playerCards[0].value == playerCards[1].value) ? 1.0 : 0.0;
     }
     
-    // FEATURE 19: High card strength (RENUMBERED from 21)
+    // FEATURE 19: High card strength
     if (cardCount >= 2) {
         int highCard = (playerCards[0].value > playerCards[1].value) ? 
                        playerCards[0].value : playerCards[1].value;
@@ -353,13 +345,13 @@ void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int 
     }
 }
 
-// Enhanced decision making function
+// Decision making function
 int makeEnhancedDecision(NeuralNetwork *nn, Player *player, Hand *communityCards, 
                         int pot, int currentBet, int numPlayers, int position) {
     double input[INPUT_SIZE];
     
-    // Use enhanced game state encoding
-    encodeEnhancedGameState(player, communityCards, pot, currentBet, numPlayers, position, input);
+    // Use game state encoding
+    encodeGameState(player, communityCards, pot, currentBet, numPlayers, position, input);
     
     // Forward propagation
     forwardpropagate(nn, input);
@@ -1149,7 +1141,7 @@ void pureReinforcementLearning(int numGames, int numPlayers) {
     
     // Main self-play training loop
     for (int game = 0; game < numGames; game++) {
-        GameRecord record = playEnhancedSelfPlayGame(networks, numPlayers, rb);
+        GameRecord record = selfPlayGame(networks, numPlayers, rb);
         
         // Update statistics
         wins[record.winner]++;

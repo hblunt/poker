@@ -138,7 +138,7 @@ HandScore scoreHand(Card hand[], int size) {
             } else if (values[i] == 2) {
                 pairCount++;
                 if (pairCount == 1) {
-                    score.secondaryValue = score.primaryValue; // Move previous pair to secondary
+                    score.secondaryValue = score.primaryValue;
                     score.primaryValue = i;
                 } else if (pairCount == 2 && i > score.primaryValue) {
                     score.secondaryValue = score.primaryValue;

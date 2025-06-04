@@ -10,7 +10,7 @@
 #include "player.h"
 
 // Enhanced neural network configuration
-#define INPUT_SIZE 20           // Enhanced feature set (22 features)
+#define INPUT_SIZE 20           // 20 features
 #define HIDDEN_SIZE 30          // Optimal hidden layer size
 #define OUTPUT_SIZE 3           // Fold, Call, Raise
 
@@ -25,6 +25,22 @@
 // ===================================================================
 // CORE DATA STRUCTURES
 // ===================================================================
+
+// Training statistics structure for monitoring neural network training progress
+typedef struct {
+    int currentEpoch;               // Current training epoch
+    int maxEpochs;                  // Maximum number of epochs
+    double *lossHistory;            // Array storing loss for each epoch
+    int *epochNumbers;              // Array storing epoch numbers
+    double bestLoss;                // Best (lowest) loss achieved
+    int bestEpoch;                  // Epoch when best loss was achieved
+    double initialLoss;             // Loss at the start of training
+    clock_t startTime;              // Training start time
+    double recentLossAverage;       // Average loss over recent epochs (for overfitting detection)
+    bool overfittingDetected;       // Flag indicating if overfitting was detected
+    int stagnationCount;            // Number of epochs without improvement
+    FILE *logFile;                  // File pointer for training log output
+} TrainingStats;
 
 // Opponent tracking structure for enhanced decision making
 typedef struct {
@@ -51,7 +67,6 @@ typedef struct {
 
 // Neural network structure
 typedef struct {
-    // Network architecture
     int inputSize;
     int hiddenSize;
     int outputSize;
@@ -72,25 +87,7 @@ typedef struct {
     double activationFunction;
 } NeuralNetwork;
 
-// Training statistics structure for monitoring
-typedef struct {
-    double *lossHistory;        // Loss for each epoch
-    int *epochNumbers;          // Epoch numbers for plotting
-    int currentEpoch;           // Current epoch number
-    int maxEpochs;              // Total epochs planned
-    double bestLoss;            // Best loss achieved
-    int bestEpoch;              // Epoch where best loss occurred
-    double initialLoss;         // Loss at start of training
-    clock_t startTime;          // Training start time
-    FILE *logFile;              // File for logging training progress
-    double recentLossAverage;   // Average loss over last 50 epochs
-    bool overfittingDetected;   // Flag for overfitting
-    int stagnationCount;        // Epochs without improvement
-} TrainingStats;
 
-// ===================================================================
-// CORE NEURAL NETWORK FUNCTIONS
-// ===================================================================
 
 // Network creation and management
 NeuralNetwork* createNetwork(int inputSize, int hiddenSize, int outputSize);
@@ -116,7 +113,7 @@ void initializeOpponentProfiles(int numPlayers);
 void updateOpponentProfile(int playerIndex, int action, bool voluntaryAction, int betAmount, int potSize);
 
 // Enhanced game state encoding
-void encodeEnhancedGameState(Player *player, Hand *communityCards, int pot, int currentBet, int numPlayers, int position, double *output);
+void encodeGameState(Player *player, Hand *communityCards, int pot, int currentBet, int numPlayers, int position, double *output);
 
 // Poker-specific analysis functions
 double calculateHandPotential(Card playerCards[], Card communityCards[], int numCommunity);
@@ -135,11 +132,12 @@ void pureReinforcementLearning(int numGames, int numPlayers);
 // Bootstrap data generation
 void generateMinimalBootstrap(double **inputs, double **outputs, int numSamples);
 
-// Training statistics management
+// Training monitoring functions
 TrainingStats* initializeTrainingStats(int maxEpochs);
+void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **inputs, 
+                        double **targets, int numSamples, double learningRate);
 double calculateLoss(NeuralNetwork *nn, double **inputs, double **targets, int numSamples);
 double calculateAccuracy(NeuralNetwork *nn, double **inputs, double **targets, int numSamples);
-void updateTrainingStats(TrainingStats *stats, NeuralNetwork *nn, double **inputs, double **targets, int numSamples, double learningRate);
 
 // Utility functions
 void printRepeatedChar(char c, int count);
